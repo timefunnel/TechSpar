@@ -51,6 +51,20 @@ describe('resume compatibility', () => {
     await expect(service.upload(context, 'resume.pdf', new TextEncoder().encode('not a pdf'))).rejects.toThrow('not a valid PDF')
   })
 
+  test('accepts a 25 MB PDF and rejects files larger than 50 MB', async () => {
+    const twentyFiveMbPdf = new Uint8Array(25 * 1024 * 1024)
+    twentyFiveMbPdf.set(pdf)
+    expect(await service.upload(context, 'large-resume.pdf', twentyFiveMbPdf)).toEqual({
+      ok: true,
+      filename: 'large-resume.pdf',
+      size: twentyFiveMbPdf.length,
+    })
+
+    const oversizedPdf = new Uint8Array(50 * 1024 * 1024 + 1)
+    oversizedPdf.set(pdf)
+    await expect(service.upload(context, 'oversized-resume.pdf', oversizedPdf)).rejects.toThrow('max 50 MB')
+  })
+
   test('loads full resume text without embedding or retrieval', async () => {
     await service.upload(context, 'resume.pdf', pdf)
     expect(await service.text(context)).toBe('完整简历原文\n第二行')

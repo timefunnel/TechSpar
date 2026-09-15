@@ -4,7 +4,7 @@ import { STRUCTURED_CHAT_OPTIONS } from '../provider/ports.ts'
 import type { RequestContext } from '../kernel/context.ts'
 import type { ResumeDependencies, ResumeUseCases } from './ports.ts'
 
-const MAX_RESUME_BYTES = 20 * 1024 * 1024
+const MAX_RESUME_BYTES = 50 * 1024 * 1024
 const MAX_PARSE_CHARS = 20_000
 
 const RESUME_PARSE_PROMPT = `请把下面这份简历的原文,解析成结构化 JSON。
@@ -57,7 +57,7 @@ export class ResumeService implements ResumeUseCases {
     const userId = this.userId(context)
     if (!filename.toLowerCase().endsWith('.pdf')) throw new AppError('Only PDF files are supported.', 400)
     if (!plainFilename(filename)) throw new AppError('Invalid resume filename.', 400)
-    if (bytes.length > MAX_RESUME_BYTES) throw new AppError('Resume PDF is too large (max 20 MB).', 413)
+    if (bytes.length > MAX_RESUME_BYTES) throw new AppError('Resume PDF is too large (max 50 MB).', 413)
     const header = new TextDecoder('latin1').decode(bytes.slice(0, 1024))
     if (!header.includes('%PDF-')) throw new AppError('Uploaded file is not a valid PDF.', 400)
     await this.deps.store.replace(userId, filename, bytes)
