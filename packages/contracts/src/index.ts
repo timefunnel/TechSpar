@@ -1,4 +1,10 @@
 import { z } from 'zod'
+import { InterviewModeSchema } from './interview-shared.ts'
+export * from './interview-shared.ts'
+export * from './interview-responses.ts'
+export * from './task-responses.ts'
+export * from './profile-responses.ts'
+export * from './copilot-audio.ts'
 
 const UploadedFileSchema = z.instanceof(File).meta({ type: 'string', format: 'binary' })
 
@@ -36,6 +42,8 @@ export const AuthResponseSchema = z.object({
   user: AuthUserSchema,
 })
 
+export const AuthIdentitySchema = z.strictObject({ id: z.string().min(1) })
+
 export const AuthConfigSchema = z.object({
   allow_registration: z.boolean(),
 })
@@ -67,6 +75,7 @@ export const EmbeddingSettingsSchema = z.object({
 
 export const ServiceSettingsSchema = z.object({
   dashscope_api_key: z.string().default(''),
+  dashscope_workspace_id: z.string().trim().max(100).regex(/^[a-zA-Z0-9-]*$/).optional(),
   tavily_api_key: z.string().default(''),
   oss_access_key_id: z.string().default(''),
   oss_access_key_secret: z.string().default(''),
@@ -144,16 +153,6 @@ export const RecordingAnalyzeSchema = z.object({
 export const RecordingAnalyzeResponseSchema = z.object({ session_id: z.string(), status: z.literal('pending') })
 export const BinarySchema = z.any()
 
-export const InterviewModeSchema = z.enum(['resume', 'topic_drill', 'jd_prep', 'recording'])
-export const SessionStatusSchema = z.enum(['ongoing', 'ended', 'reviewing', 'reviewed', 'review_failed'])
-export const InterviewQuestionSchema = z.object({
-  id: z.union([z.string(), z.number()]),
-  question: z.string(),
-  difficulty: z.number().optional(),
-  focus_area: z.string().optional(),
-  category: z.string().optional(),
-  intent: z.string().optional(),
-}).passthrough()
 export const InterviewAnswerSchema = z.object({
   question_id: z.union([z.string(), z.number()]),
   answer: z.string(),
@@ -167,15 +166,22 @@ export const StartInterviewSchema = z.object({
   target_role: z.string().optional(),
   job_description: z.string().max(12000).optional(),
 })
-export const JobPrepPreviewSchema = z.object({ jd_text: z.string(), company: z.string().nullable().optional(), position: z.string().nullable().optional(), use_resume: z.boolean().default(true) })
-export const JobPrepStartSchema = JobPrepPreviewSchema.extend({ preview_data: z.record(z.string(), z.unknown()).optional() })
+export const JobPrepPreviewSchema = z.object({ request_id: z.uuid().optional(), jd_text: z.string(), company: z.string().nullable().optional(), position: z.string().nullable().optional(), use_resume: z.boolean().default(true) })
+const JobPrepStartFieldsSchema = JobPrepPreviewSchema.extend({ session_id: z.string().min(1).max(200).optional(), preview_data: z.record(z.string(), z.unknown()).optional() })
+export const JobPrepStartSchema = z.union([
+  JobPrepStartFieldsSchema.extend({ session_id: z.string().min(1).max(200) }),
+  JobPrepStartFieldsSchema.extend({ request_id: z.uuid() }),
+])
 export const InterviewChatSchema = z.object({ session_id: z.string(), message: z.string() })
 export const EndInterviewSchema = z.object({ answers: z.array(InterviewAnswerSchema).default([]) })
 export const ReferenceAnswerRequestSchema = z.object({ session_id: z.string(), question_id: z.union([z.string(), z.number()]) })
 export const ReferenceAnswerResponseSchema = z.object({ reference_answer: z.string(), cached: z.boolean() })
+/** @deprecated Phase-two HTTP routes use named response schemas; remove in phase five. */
 export const InterviewObjectSchema = z.record(z.string(), z.unknown())
 export const InterviewTopicsSchema = z.array(z.string())
+/** @deprecated Phase-two HTTP routes use named response schemas; remove in phase five. */
 export const TaskStatusSchema = z.object({ status: z.enum(['pending', 'done', 'error']), type: z.string(), error: z.string().optional() }).passthrough()
+/** @deprecated Phase-two HTTP routes use named response schemas; remove in phase five. */
 export const ProfileSchema = z.record(z.string(), z.unknown())
 export const TargetRoleSchema = z.object({ target_role: z.string() })
 export const ProfileFeedbackSchema = z.object({ point: z.string(), verdict: z.enum(['accurate', 'inaccurate', 'acknowledged']) })
@@ -206,27 +212,13 @@ export const VoiceprintUploadSchema = z.object({ file: UploadedFileSchema })
 export const VoiceprintEnrolledSchema = OkSchema.extend({ enrolled_at: z.string() })
 
 export const CopilotClientMessageSchema = z.discriminatedUnion('type', [
-  z.object({ type: z.literal('start'), prep_id: z.string().optional() }),
+  z.object({ type: z.literal('start'), prep_id: z.string().optional(), audio_mode: z.literal('dual').optional() }),
   z.object({ type: z.literal('manual'), text: z.string().optional() }),
   z.object({ type: z.literal('candidate_response'), text: z.string() }),
   z.object({ type: z.literal('stop') }),
 ])
 
-export const CopilotServerEventTypeSchema = z.enum([
-  'asr_interim',
-  'asr_final',
-  'copilot_update',
-  'risk_alert',
-  'answer_chunk',
-  'answer_meta',
-  'answer_done',
-  'hr_profile_update',
-  'monitor_update',
-  'progress',
-  'started',
-  'stopped',
-  'error',
-])
+export * from './events.ts'
 
 export type LoginRequest = z.infer<typeof LoginRequestSchema>
 export type RegisterRequest = z.infer<typeof RegisterRequestSchema>

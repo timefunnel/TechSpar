@@ -1,3 +1,4 @@
+import type { IndexRebuildEvent } from './events.ts'
 import type { RequestContext } from '../kernel/context.ts'
 import type {
   ResolvedLlmConfig,
@@ -10,7 +11,7 @@ import type {
   ProviderSource,
 } from './model.ts'
 
-export type ChatReasoningEffort = 'low' | 'high' | 'max'
+export type ChatReasoningEffort = 'none' | 'low' | 'high' | 'max'
 export type ChatCompleteOptions = {
   maxTokens?: number
   temperature?: number
@@ -22,6 +23,8 @@ export type ChatUsage = { promptTokens: number; completionTokens: number; cached
 
 export type ChatStreamOptions = {
   temperature?: number
+  maxTokens?: number
+  reasoningEffort?: ChatReasoningEffort
   /**
    * 流式结束时回调用量。
    *
@@ -65,7 +68,7 @@ export interface SettingsUseCases {
 export interface SettingsOperationsUseCases {
   testLlm(context: RequestContext, value: LlmSettings): Promise<{ ok: boolean; error?: string }>
   testEmbedding(context: RequestContext, value: EmbeddingSettings): Promise<{ ok: boolean; error?: string }>
-  rebuildIndex(context: RequestContext): AsyncIterable<Record<string, unknown>>
+  rebuildIndex(context: RequestContext): AsyncIterable<IndexRebuildEvent>
 }
 
 export interface UsageRepository {

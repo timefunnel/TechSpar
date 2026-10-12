@@ -32,6 +32,7 @@ const FILTER_OPTIONS = [
 // Session lifecycle → UI affordances. Ongoing sessions with no review yet are
 // shown distinctly from review-failed ones so users can take the right action.
 const STATUS_META = {
+  prepared: { label: "待开始训练", tone: "info", icon: Play },
   reviewed: { label: "已复盘", tone: "success", icon: CircleCheck },
   reviewing: { label: "复盘生成中", tone: "info", icon: LoaderCircle, spin: true },
   review_failed: { label: "总结失败", tone: "danger", icon: CircleAlert },
@@ -120,7 +121,8 @@ export default function History() {
   // Status dictates where a row click goes. Reviewed → /review. Anything else
   // routes back into /interview so the user can continue answering or retry review.
   const openSession = (session) => {
-    if (session.status === "reviewed") navigate(`/review/${session.session_id}`);
+    if (session.status === "prepared") navigate(`/mock-interview?mode=targeted&session=${encodeURIComponent(session.session_id)}`);
+    else if (session.status === "reviewed") navigate(`/review/${session.session_id}`);
     else navigate(`/interview/${session.session_id}`);
   };
 
@@ -207,7 +209,7 @@ export default function History() {
           </div>
 
           <div className="grid gap-2 sm:grid-cols-3 xl:min-w-[520px]">
-            <HistorySummaryChip label="总记录" value={total} hint="累计完成" />
+            <HistorySummaryChip label="总记录" value={total} hint="已保存记录" />
             <HistorySummaryChip label="当前列表" value={sessions.length} hint="本页已加载" />
             <HistorySummaryChip
               label="筛选状态"
@@ -322,7 +324,7 @@ export default function History() {
           <>
             <div className="mt-3 flex items-center justify-between gap-3 border-b border-border/70 pb-2">
               <div className="flex items-center gap-2">
-                <div className="text-sm font-semibold">复盘列表</div>
+                <div className="text-sm font-semibold">训练与备面记录</div>
                 {hasFilters && (
                   <Badge variant="outline" className="rounded-full px-2.5 py-0.5 text-[11px]">
                     已筛选
@@ -476,7 +478,7 @@ function HistoryRow({ session, onOpen, onDelete, onRetry, retrying }) {
 
             {status !== "review_failed" && extractFailed && (
               <div className="mt-2 text-[12px] leading-5 text-orange/90">
-                这场的画像提取失败，观察未收录进个人画像——点右侧"重新生成"可补跑。
+                复盘已保存，但画像或记忆同步未完成——点右侧“重试同步”可补跑未完成步骤。
               </div>
             )}
           </div>
@@ -486,12 +488,12 @@ function HistoryRow({ session, onOpen, onDelete, onRetry, retrying }) {
               <button
                 type="button"
                 className="inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-[12px] font-medium text-primary transition-colors hover:bg-primary/10 disabled:opacity-60"
-                title="重新生成复盘"
+                title={extractFailed ? "重试画像与记忆同步" : "重新生成复盘"}
                 onClick={(event) => onRetry(event, session)}
                 disabled={retrying}
               >
                 <RotateCw size={13} className={retrying ? "animate-spin" : ""} />
-                {retrying ? "重试中" : "重新生成"}
+                {retrying ? "重试中" : extractFailed ? "重试同步" : "重新生成"}
               </button>
             )}
             <button

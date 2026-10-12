@@ -4,7 +4,7 @@ import type { TaskRecord } from '../interview/model.ts'
 import type { RequestContext } from '../kernel/context.ts'
 import type { EmbeddingUseCases, ProviderSettingsRepository, TextGenerationUseCases } from '../provider/ports.ts'
 import type { ResumeUseCases } from '../resume/ports.ts'
-import type { VoiceRoleDetectionUseCases, VoiceRoleDetector } from '../voiceprint/ports.ts'
+import type { VoiceRoleDetector } from '../voiceprint/ports.ts'
 import type { CopilotClientMessage, CopilotPrepRecord, CopilotServerEvent, CopilotSessionState } from './model.ts'
 
 export interface CopilotRepository {
@@ -33,17 +33,18 @@ export interface CopilotPrepUseCases {
 }
 
 export interface RealtimeAsrSession {
-  start(): Promise<void>
+  /** Abort cancels startup and closes the session; stop must settle pending startup. */
+  start(signal: AbortSignal): Promise<void>
   sendAudio(bytes: Uint8Array): boolean
   stop(): Promise<void>
 }
 export interface RealtimeAsrFactory {
-  create(input: { apiKey: string; roleDetector?: VoiceRoleDetector; onInterim(text: string): Promise<void>; onFinal(text: string, role?: 'hr' | 'candidate'): Promise<void>; onError(message: string): Promise<void> }): RealtimeAsrSession
+  create(input: { apiKey: string; workspaceId?: string; roleDetector?: VoiceRoleDetector; onInterim(text: string): Promise<void>; onFinal(text: string, role?: 'hr' | 'candidate'): Promise<void>; onError(message: string): Promise<void> }): RealtimeAsrSession
 }
 
 export interface CopilotRealtimeConnection {
   handle(message: CopilotClientMessage): Promise<void>
-  audio(bytes: Uint8Array): void
+  audio(bytes: Uint8Array, source?: 'system' | 'microphone'): void
   close(): Promise<void>
 }
 export interface CopilotRealtimeUseCases {
@@ -61,5 +62,5 @@ export type CopilotDependencies = {
   settings: ProviderSettingsRepository
   search: WebSearchDriver
   asr: RealtimeAsrFactory
-  voiceprint?: VoiceRoleDetectionUseCases
+  asrConfig?: { apiKey: string; workspaceId?: string }
 }

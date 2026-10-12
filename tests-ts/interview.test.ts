@@ -139,6 +139,24 @@ describe('interview persistence', () => {
 })
 
 describe('resume interview state machine', () => {
+  for (const output of ['{"score":11,"should_advance":true}', '{"score":7,"should_advance":"true"}', '{"score":null}', '{"brief":[]}', 'null', '{"score":']) {
+    for (const streaming of [false, true]) test(`discards invalid evaluation ${output} (stream=${streaming}) before state persistence`, async () => {
+      const states = new BunResumeInterviewStateRepository(await databasePath()); states.initialize()
+      const engine = new ResumeInterviewEngine(new FakeAi([`继续介绍项目。<!--EVAL:${output}${output.endsWith(':') ? '' : '-->'}`]), states, profile)
+      const state = { messages: [], phase: 'technical' as const, target_role: '后端', job_description: '', resume_context: '', questions_asked: [], phase_question_count: 0, is_finished: false, last_eval: { score: 8, should_advance: true }, eval_history: [] }
+      try {
+        let visible = ''
+        if (streaming) {
+          for await (const event of engine.stream(context, 'invalid-eval', state, '回答')) if ('token' in event) visible += event.token
+        } else visible = (await engine.turn(context, 'invalid-eval', state, '回答')).message
+        expect(visible).toBe('继续介绍项目。')
+        const stored = await states.load('invalid-eval', 'user-a')
+        expect(stored).toMatchObject({ phase: 'technical', last_eval: {}, eval_history: [] })
+        expect(stored?.messages.at(-1)?.content).toBe('继续介绍项目。')
+      } finally { states.close() }
+    })
+  }
+
   test('injects target role and JD and persists them in state', async () => {
     const path = await databasePath()
     const states = new BunResumeInterviewStateRepository(path)
@@ -172,23 +190,24 @@ describe('resume interview state machine', () => {
 })
 
 describe('interview application service', () => {
-  test('normalizes structured JD preview fields returned by the model', async () => {
+  test.each(['', '🧑‍💻📝 分析结果：\n'])('validates structured JD preview with prefix %s and derives resume usage from actual context', async (prefix) => {
     const path = await databasePath()
     const sessions = new BunInterviewSessionRepository(path); sessions.initialize()
     const states = new BunResumeInterviewStateRepository(path); states.initialize()
-    const ai = new FakeAi([JSON.stringify({
+    const ai = new FakeAi([prefix + JSON.stringify({
       company: '跨越速运',
       position: '高级 Java 工程师',
-      role_summary: { overview: '负责物流核心系统开发', level: '高级岗位' },
-      focus_areas: [{ area: 'Java', importance: '高', expected_capabilities: ['JVM 调优', '并发编程'] }],
-      prep_priorities: [{ priority: 1, topic: '分布式系统', actions: ['准备高并发案例', '复习一致性方案'] }],
-      likely_question_groups: [{ group: '系统设计', questions: ['如何设计物流订单系统？'] }],
+      role_summary: '负责物流核心系统开发',
+      focus_areas: [{ area: 'Java', priority: '高', reason: 'JVM 调优和并发编程' }],
+      prep_priorities: ['准备高并发案例'],
+      likely_question_groups: [{ title: '系统设计', reason: '岗位要求', sample_questions: ['如何设计物流订单系统？'] }],
+      question_blueprint: [{ category: '技术', focus_area: 'Java', intent: '验证原理', difficulty: 3 }],
       resume_alignment: {
         resume_used: true,
-        fit_assessment: { conclusion: '基本匹配', basis: ['Java 经验吻合', '物流经验不足'] },
-        matching_evidence: [{ evidence: '有 Java 项目经验', relevance: '高' }],
-        risk_gaps: [{ gap: '缺少物流经验', reason: '简历未体现物流行业项目' }],
-        recommended_stories: [{ story: '订单系统改造', evidence_to_prepare: ['吞吐量提升', '故障率下降'] }],
+        fit_assessment: '没有可用简历',
+        matching_evidence: [],
+        risk_gaps: ['需要补充项目证据'],
+        recommended_stories: [],
       },
     })])
     const service = new InterviewService(interviewDependencies({ sessions, states, ai }))
@@ -200,15 +219,13 @@ describe('interview application service', () => {
     sessions.close(); states.close()
 
     expect(result.preview).toMatchObject({
-      role_summary: '负责物流核心系统开发；高级岗位',
-      focus_areas: [{ area: 'Java', priority: '高', reason: 'JVM 调优；并发编程' }],
-      prep_priorities: ['分布式系统：准备高并发案例；复习一致性方案'],
-      likely_question_groups: [{ title: '系统设计', reason: '', sample_questions: ['如何设计物流订单系统？'] }],
+      role_summary: '负责物流核心系统开发',
+      focus_areas: [{ area: 'Java', priority: '高', reason: 'JVM 调优和并发编程' }],
+      prep_priorities: ['准备高并发案例'],
+      likely_question_groups: [{ title: '系统设计', reason: '岗位要求', sample_questions: ['如何设计物流订单系统？'] }],
       resume_alignment: {
-        fit_assessment: '基本匹配；Java 经验吻合；物流经验不足',
-        matching_evidence: ['有 Java 项目经验（高）'],
-        risk_gaps: ['缺少物流经验：简历未体现物流行业项目'],
-        recommended_stories: [{ project: '订单系统改造', reason: '吞吐量提升；故障率下降' }],
+        resume_used: false, fit_assessment: '没有可用简历',
+        matching_evidence: [], risk_gaps: ['需要补充项目证据'], recommended_stories: [],
       },
     })
   })
@@ -246,15 +263,20 @@ describe('interview application service', () => {
     const sessions = new BunInterviewSessionRepository(path); sessions.initialize()
     const states = new BunResumeInterviewStateRepository(path); states.initialize()
     const ai = new FakeAi([JSON.stringify([{ id: 1, question: '解释事件循环', difficulty: 3 }])])
+    const profileRequests: unknown[][] = []
     const drillProfile: CandidateProfilePort = {
-      async summary() { return '本轮到期复习：微任务队列\n历史语义洞察：上次忽略了饿饿问题' },
+      async summary(...args) { profileRequests.push(args); expect(ai.calls).toHaveLength(0); return '本轮到期复习：微任务队列\n历史语义洞察：上次忽略了饿饿问题' },
       async targetRole() { return '' }, async updateTargetRole() {},
     }
-    const service = new InterviewService(interviewDependencies({
+    const deps = interviewDependencies({
       sessions, states, ai, candidateProfile: drillProfile,
       knowledgeStore: emptyKnowledgeStore({ typescript: { name: 'TypeScript', icon: '', dir: 'typescript' } }),
-    }))
+    })
+    deps.knowledge.context = async () => '事件循环与微任务队列'
+    deps.knowledgeStore.readHighFrequency = async () => '任务调度顺序'
+    const service = new InterviewService(deps)
     await service.start(context, { mode: 'topic_drill', topic: 'typescript', num_questions: 1 })
+    expect(profileRequests).toEqual([['user-a', 'typescript', '专项训练：TypeScript\n本轮知识点：事件循环与微任务队列\n高频考点：任务调度顺序']])
     expect(ai.calls[0]![1]!.content).toContain('本轮到期复习：微任务队列')
     expect(ai.calls[0]![1]!.content).toContain('历史语义洞察：上次忽略了饿饿问题')
     sessions.close(); states.close()
@@ -272,6 +294,7 @@ describe('interview application service', () => {
     }))
 
     const result = await service.start(context, { mode: 'topic_drill', topic: 'typescript', num_questions: 10 })
+    if (result.mode !== 'topic_drill') throw new Error('Expected topic drill result')
     expect(result.questions).toHaveLength(10)
     expect(ai.calls).toHaveLength(2)
     expect(ai.options).toEqual([
@@ -367,5 +390,163 @@ describe('interview application service', () => {
     expect(savedProfile.stats.score_history.at(-1)).toMatchObject({ mode: 'resume', avg_score: 7.3, dimension_scores: dimensions })
     expect(savedProfile.stats.dimension_scores).toEqual(dimensions)
     sessions.close(); states.close(); vectors.close()
+  })
+})
+
+
+describe('job preparation saved lifecycle', () => {
+  const input = { jd_text: '合成岗位要求 TypeScript、数据库、分布式系统设计、缓存、异步执行和清晰的技术表达能力。'.repeat(2), company: '示例公司', position: '后端工程师', use_resume: false, request_id: 'b9c47adb-1fd3-4376-b366-b3b777208be8' }
+  const preview = JSON.stringify({ company: '示例公司', position: '后端工程师', role_summary: '后端工程师', focus_areas: [], likely_question_groups: [], resume_alignment: { resume_used: false, fit_assessment: '未启用简历', matching_evidence: [], risk_gaps: [], recommended_stories: [] }, prep_priorities: [], question_blueprint: [] })
+  const questions = JSON.stringify({ questions: Array.from({ length: 4 }, (_, i) => ({ id: i + 1, question: `合成问题 ${i + 1}` })) })
+  async function setup(replies: string[] = []) {
+    const path = await databasePath()
+    const sessions = new BunInterviewSessionRepository(path); sessions.initialize()
+    const states = new BunResumeInterviewStateRepository(path); states.initialize()
+    const ai = new FakeAi(replies)
+    const deps = interviewDependencies({ sessions, states, ai })
+    let serial = 0
+    deps.ids = { next: () => `job-${++serial}` }
+    return { path, sessions, states, ai, deps, service: new InterviewService(deps) }
+  }
+
+  test('persists analysis before practice; restores after reopen and retries without model calls', async () => {
+    const h = await setup([preview, questions])
+    const first = await h.service.previewJob(context, input)
+    expect((await h.service.history(context, {})).items).toMatchObject([{ session_id: first.session_id, status: 'prepared' }])
+    expect((await h.service.resume(context, first.session_id)).meta).toMatchObject({ jd_text: input.jd_text, use_resume: false, preview: first.preview })
+    expect(await h.service.previewJob(context, input)).toEqual(first)
+    expect(h.ai.calls).toHaveLength(1)
+    await expect(h.service.end(context, first.session_id, [])).rejects.toThrow('请先开始训练')
+    h.sessions.close()
+    const reopened = new BunInterviewSessionRepository(h.path); reopened.initialize()
+    const service = new InterviewService({ ...h.deps, sessions: reopened })
+    expect(await service.previewJob(context, input)).toEqual(first)
+    const started = await service.startJob(context, { ...input, session_id: first.session_id, jd_text: 'tampered', preview_data: { role_summary: 'tampered' } })
+    expect(started.session_id).toBe(first.session_id)
+    expect(started.meta.jd_text).toBe(input.jd_text)
+    expect(started.preview).toEqual(first.preview)
+    expect((await service.history(context, {})).items).toMatchObject([{ session_id: first.session_id, status: 'ongoing' }])
+    expect(await service.startJob(context, { ...input, session_id: first.session_id })).toEqual(started)
+    expect(h.ai.calls).toHaveLength(2)
+    await reopened.updateMeta(first.session_id, 'user-a', { profile_extract_failed: false })
+    expect(await service.startJob(context, { ...input, session_id: first.session_id })).toEqual(started)
+    await service.draft(context, first.session_id, [{ question_id: 1, answer: '已保存的回答' }])
+    expect((await service.resume(context, first.session_id)).transcript.slice(0, 2)).toMatchObject([{ role: 'assistant' }, { role: 'user', content: '已保存的回答' }])
+    expect(await service.history({ ...context, userId: 'user-b' }, {})).toEqual({ items: [], total: 0 })
+    await expect(service.startJob({ ...context, userId: 'user-b' }, { ...input, session_id: first.session_id })).rejects.toThrow('备面记录不存在')
+    await service.delete(context, first.session_id)
+    await expect(service.previewJob(context, input)).rejects.toThrow('已删除')
+    expect(h.ai.calls).toHaveLength(2)
+    reopened.close(); h.states.close()
+  })
+
+  test('retains the saved plan when question generation fails and preserves previous plans on reanalysis', async () => {
+    const h = await setup([preview, '{"questions":[]}', questions, preview])
+    const first = await h.service.previewJob(context, input)
+    await expect(h.service.startJob(context, { ...input, session_id: first.session_id })).rejects.toThrow('数量不足')
+    expect((await h.service.resume(context, first.session_id)).status).toBe('prepared')
+    await h.service.startJob(context, { ...input, session_id: first.session_id })
+    await expect(h.service.previewJob(context, { ...input, position: '不同岗位' })).rejects.toThrow('已改变')
+    const next = await h.service.previewJob(context, { ...input, request_id: crypto.randomUUID(), position: '不同岗位' })
+    expect(next.session_id).not.toBe(first.session_id)
+    expect((await h.service.history(context, {})).total).toBe(2)
+    h.sessions.close(); h.states.close()
+  })
+
+  test('serializes concurrent submissions across repository instances and completes after caller disconnects', async () => {
+    const h = await setup()
+    let release!: (value: string) => void
+    let called!: () => void
+    const entered = new Promise<void>((resolve) => { called = resolve })
+    const pending = new Promise<string>((resolve) => { release = resolve })
+    let signal: AbortSignal | undefined
+    h.deps.ai = { async complete(ctx) { signal = ctx.signal; called(); return pending }, async *stream() {} }
+    const service = new InterviewService(h.deps)
+    const abort = new AbortController()
+    const first = service.previewJob({ ...context, signal: abort.signal }, input)
+    await entered
+    const otherRepo = new BunInterviewSessionRepository(h.path); otherRepo.initialize()
+    const otherService = new InterviewService({ ...h.deps, sessions: otherRepo })
+    await expect(otherService.previewJob(context, input)).rejects.toThrow('正在生成')
+    abort.abort()
+    expect(signal?.aborted).toBe(false)
+    release(preview)
+    const result = await first
+    expect(await otherService.previewJob(context, input)).toEqual(result)
+    expect((await otherService.history(context, {})).total).toBe(1)
+    otherRepo.close(); h.sessions.close(); h.states.close()
+  })
+
+  test('does not recreate a plan deleted while questions are being generated', async () => {
+    const h = await setup([preview])
+    const plan = await h.service.previewJob(context, input)
+    let release!: (value: string) => void
+    let entered!: () => void
+    const started = new Promise<void>((resolve) => { entered = resolve })
+    h.deps.ai = { async complete() { entered(); return new Promise<string>((resolve) => { release = resolve }) }, async *stream() {} }
+    const service = new InterviewService(h.deps)
+    const pending = service.startJob(context, { ...input, session_id: plan.session_id })
+    await started
+    await service.delete(context, plan.session_id)
+    release(questions)
+    await expect(pending).rejects.toThrow('变更或删除')
+    expect(await service.history(context, {})).toEqual({ items: [], total: 0 })
+    h.sessions.close(); h.states.close()
+  })
+
+  for (const operation of ['preview', 'start'] as const) test(`reports deletion after ${operation} commits as 404, not a TypeError`, async () => {
+    const h = await setup([preview, questions])
+    const plan = operation === 'start' ? await h.service.previewJob(context, input) : undefined
+    const complete = h.sessions.completeJobPrep.bind(h.sessions)
+    h.sessions.completeJobPrep = async (value) => {
+      const saved = await complete(value)
+      if (saved) await h.sessions.delete(value.sessionId, value.userId)
+      return saved
+    }
+    const run = () => operation === 'preview'
+      ? h.service.previewJob(context, input)
+      : h.service.startJob(context, { ...input, session_id: plan!.session_id })
+    await expect(run()).rejects.toMatchObject({ status: 404 })
+    await expect(run()).rejects.toMatchObject({ status: 404 })
+    expect(h.ai.calls).toHaveLength(operation === 'preview' ? 1 : 2)
+    h.sessions.close(); h.states.close()
+  })
+
+  test('requires a stable direct-start request and replays its result after repository reopen', async () => {
+    const h = await setup([questions])
+    const direct = { ...input, preview_data: JSON.parse(preview) }
+    await expect(h.service.startJob(context, { ...direct, request_id: undefined })).rejects.toMatchObject({ status: 400 })
+    expect(h.ai.calls).toHaveLength(0)
+    const first = await h.service.startJob(context, direct)
+    h.sessions.close()
+    const reopened = new BunInterviewSessionRepository(h.path); reopened.initialize()
+    const service = new InterviewService({ ...h.deps, sessions: reopened })
+    expect(await service.startJob(context, direct)).toEqual(first)
+    expect((await service.history(context, {})).total).toBe(1)
+    expect(h.ai.calls).toHaveLength(1)
+    reopened.close(); h.states.close()
+  })
+
+  test('recovers an expired generation lease and fences its previous owner', async () => {
+    const h = await setup()
+    const { Database } = await import('bun:sqlite')
+    const claim = { userId: 'user-a', key: 'preview:lease', fingerprint: 'same-input', owner: 'old-worker' }
+    expect(await h.sessions.claimJobPrep(claim)).toEqual({ state: 'claimed' })
+    const db = new Database(h.path)
+    db.query('UPDATE job_prep_operations SET updated_at = 0').run()
+    expect(await h.sessions.claimJobPrep({ ...claim, owner: 'new-worker' })).toEqual({ state: 'claimed' })
+    const result = { userId: 'user-a', key: claim.key, sessionId: 'recovered', meta: {}, questions: [], existing: false }
+    expect(await h.sessions.completeJobPrep({ ...result, owner: 'old-worker' })).toBeFalse()
+    await h.sessions.releaseJobPrep('user-a', claim.key, 'old-worker')
+    expect(await h.sessions.completeJobPrep({ ...result, owner: 'new-worker' })).toBeTrue()
+    db.close(); h.sessions.close(); h.states.close()
+  })
+
+  test('includes legacy JD sessions with questions and no answers, but still hides empty stubs', async () => {
+    const h = await setup()
+    await h.sessions.create({ sessionId: 'legacy', userId: 'user-a', mode: 'jd_prep', questions: [{ id: 1, question: '已生成题目' }] })
+    await h.sessions.create({ sessionId: 'empty', userId: 'user-a', mode: 'jd_prep' })
+    expect((await h.service.history(context, {})).items.map((item) => item.session_id)).toEqual(['legacy'])
+    h.sessions.close(); h.states.close()
   })
 })

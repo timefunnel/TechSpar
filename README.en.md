@@ -11,14 +11,11 @@
 [![Electron](https://img.shields.io/badge/Electron-43-47848F.svg)](https://www.electronjs.org/)
 [![React](https://img.shields.io/badge/React-19-61DAFB.svg)](https://react.dev/)
 [![Docker](https://img.shields.io/badge/Docker-Ready-2496ED.svg)](https://www.docker.com/)
-[![License](https://img.shields.io/badge/License-CC%20BY--NC%204.0-lightgrey.svg)](LICENSE)
 
 ![TechSpar product overview](images/techspar-overview.png)
 </div>
 
 TechSpar is more than a question generator. Focused drills, resume interviews, JD prep, realtime Copilot, and recording review share the same long-term profile, knowledge base, weak points, and review schedule. Every result changes what the next round focuses on.
-
-The hosted version no longer offers free credits due to repeated abuse by automated account-registration bots. Sorry for the inconvenience, and thank you for understanding. Paid credits are available through [Afdian](https://ifdian.net/a/techspar).
 
 ## Versions and branches
 
@@ -51,7 +48,7 @@ cp .env.example .env
 
 ### Electron desktop client
 
-Download published macOS and Windows installers from [GitHub Releases](https://github.com/AnnaSuSu/TechSpar/releases).
+Download macOS and Windows installers from [GitHub Releases](https://github.com/AnnaSuSu/TechSpar/releases) and sign in online to use them. The commands below build a desktop application with a local backend from source.
 
 Run Vite, Hono, and Electron together in development:
 
@@ -66,14 +63,14 @@ bun run pack:desktop
 bun run dist:desktop
 ```
 
-Build the release targets explicitly:
+Build for a specific target platform:
 
 ```bash
 bun run dist:desktop:mac-arm64 # macOS Apple Silicon: DMG + ZIP
 bun run dist:desktop:win-x64   # Windows x64: NSIS installer
 ```
 
-Artifacts are written to `dist/desktop/`. Built applications include Electron and a compiled Bun sidecar, so end users do not need Bun. The repository configures macOS DMG/ZIP, Windows NSIS, and Linux AppImage/DEB targets. v0.3.1 includes macOS arm64 and Windows x64 packages. The public packages are not commercially code-signed and may trigger operating-system security warnings; installation and launch should still be validated on each target platform.
+Artifacts are written to `dist/desktop/`. Applications built from source include Electron and a compiled Bun backend, so end users do not need Bun. The repository configures macOS DMG/ZIP, Windows NSIS, and Linux AppImage/DEB targets.
 
 ### Web development
 
@@ -96,39 +93,12 @@ Then open <http://localhost>.
 
 ## Models and optional services
 
-LLM, embedding, DashScope, Tavily, OSS, and Tencent VPR credentials are user-scoped and configured after login. `.env` only contains bootstrap settings and optional platform fallback models.
+When self-hosting or building the desktop application from source, configure LLM, embedding, DashScope, Tavily, OSS, and Tencent VPR credentials in Settings. Credentials are user-scoped. `.env` only contains bootstrap settings and optional platform fallback models.
 
 - Any OpenAI-compatible chat and embeddings API is supported.
 - Local embeddings use Transformers.js and ONNX. The default is `Xenova/bge-m3`; it downloads and caches on first use with no Python, PyTorch, or pip dependency.
 - DashScope powers voice input, recording transcription, and Copilot realtime ASR.
 - Tavily adds company research, OSS supports long-audio jobs, and Tencent VPR optionally distinguishes interviewer and candidate voices.
-
-## Architecture
-
-| Layer | Technology |
-| --- | --- |
-| API host | Bun 1.3, Hono 4, `@hono/zod-openapi` |
-| Desktop | Electron 43, sandboxed renderer, constrained preload, compiled Bun sidecar |
-| Core | Pure TypeScript use cases, state machines, and owned ports |
-| Storage | SQLite and atomic JSON/file storage |
-| Providers | OpenAI-compatible APIs, Transformers.js, DashScope, OSS, Tavily, Tencent VPR |
-| Web | React 19, React Router 7, Vite 8, Tailwind CSS 4 |
-| Contracts | Zod, OpenAPI 3.1, generated frontend types |
-| Validation | Bun Test, OpenAPI parity, Node compatibility, boundary checks |
-
-TechSpar is a modular monolith with hexagonal boundaries. Hono maps HTTP, SSE, and WebSocket transports; business rules live in `packages/core`; storage, files, and providers stay in outer adapters. See [TypeScript backend architecture](docs/typescript-backend-architecture.md).
-
-```text
-apps/api/             Bun + Hono composition root and routes
-apps/desktop/         Electron main/preload, sidecar supervision, packaging
-packages/contracts/   OpenAPI and transport protocols
-packages/core/        Use cases, state machines, and ports
-packages/db/          SQLite repositories
-packages/platform/    Files, auth, configuration, and archives
-packages/providers/   LLM, embedding, ASR, OSS, search, and voiceprint adapters
-frontend/             React Web client
-tests-ts/             TypeScript tests and the legacy OpenAPI baseline
-```
 
 ## Validation
 
@@ -150,9 +120,3 @@ Electron uses the operating system's standard application-data directory for dat
 ## Contributing
 
 Issues and pull requests are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for development conventions.
-
-## License
-
-CC BY-NC 4.0.
-
-The resume editor and templates under `frontend/src/resume/` are adapted from [Magic Resume](https://github.com/JOYCEQL/magic-resume) and retain the licenses and additional terms stored in that directory.

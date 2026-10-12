@@ -1,9 +1,11 @@
+import type { InterviewStreamEvent } from './results.ts'
 import type { IdGenerator } from '../account/ports.ts'
 import type { RequestContext } from '../kernel/context.ts'
 import type { KnowledgeQuery, KnowledgeStore } from '../knowledge/ports.ts'
 import type { TextGenerationUseCases } from '../provider/ports.ts'
 import type { ProviderSettingsRepository } from '../provider/ports.ts'
 import type { ResumeUseCases } from '../resume/ports.ts'
+import type { InterviewDraftResult, InterviewResumeResult, InterviewReviewSubmissionResult, InterviewStartResult, JobPrepPreview, JobPrepStartResult, TaskStatusResult } from './results.ts'
 import type {
   InterviewAnswer,
   InterviewMessage,
@@ -20,6 +22,10 @@ import type {
 
 export interface InterviewSessionRepository {
   initialize(): void
+  claimJobPrep(input: { userId: string; key: string; fingerprint: string; owner: string }): Promise<{ state: 'claimed' | 'busy' | 'conflict' | 'done'; sessionId?: string }>
+  renewJobPrep(userId: string, key: string, owner: string): Promise<void>
+  releaseJobPrep(userId: string, key: string, owner: string): Promise<void>
+  completeJobPrep(input: { userId: string; key: string; owner: string; sessionId: string; meta: Record<string, unknown>; questions: InterviewQuestion[]; existing: boolean }): Promise<boolean>
   create(input: { sessionId: string; userId: string; mode: InterviewMode; topic?: string; questions?: InterviewQuestion[]; meta?: Record<string, unknown> }): Promise<void>
   get(sessionId: string, userId: string): Promise<InterviewSession | undefined>
   appendMessage(sessionId: string, userId: string, role: 'user' | 'assistant', content: string): Promise<boolean>
@@ -63,7 +69,7 @@ export interface PersistentTaskDispatcher {
 }
 
 export interface CandidateProfilePort {
-  summary(userId: string, topic?: string): Promise<string>
+  summary(userId: string, topic?: string, memoryQuery?: string): Promise<string>
   targetRole(userId: string): Promise<string>
   updateTargetRole(userId: string, role: string): Promise<void>
   afterReview?(input: { userId: string; session: InterviewSession }): Promise<Record<string, unknown> | undefined>
@@ -71,21 +77,21 @@ export interface CandidateProfilePort {
 }
 
 export interface InterviewUseCases {
-  previewJob(context: RequestContext, input: JobPrepInput): Promise<{ preview: Record<string, unknown> }>
-  startJob(context: RequestContext, input: JobPrepInput): Promise<Record<string, unknown>>
-  start(context: RequestContext, input: StartInterviewInput): Promise<Record<string, unknown>>
+  previewJob(context: RequestContext, input: JobPrepInput): Promise<{ session_id: string; preview: JobPrepPreview }>
+  startJob(context: RequestContext, input: JobPrepInput): Promise<JobPrepStartResult>
+  start(context: RequestContext, input: StartInterviewInput): Promise<InterviewStartResult>
   chat(context: RequestContext, sessionId: string, message: string): Promise<{ session_id: string; message: string; is_finished: boolean }>
-  chatStream(context: RequestContext, sessionId: string, message: string): AsyncIterable<{ token?: string; done?: boolean; is_finished?: boolean }>
-  end(context: RequestContext, sessionId: string, answers: InterviewAnswer[]): Promise<Record<string, unknown>>
-  draft(context: RequestContext, sessionId: string, answers: InterviewAnswer[]): Promise<Record<string, unknown>>
-  generateReview(context: RequestContext, sessionId: string): Promise<Record<string, unknown>>
+  chatStream(context: RequestContext, sessionId: string, message: string): AsyncIterable<InterviewStreamEvent>
+  end(context: RequestContext, sessionId: string, answers: InterviewAnswer[]): Promise<InterviewReviewSubmissionResult>
+  draft(context: RequestContext, sessionId: string, answers: InterviewAnswer[]): Promise<InterviewDraftResult>
+  generateReview(context: RequestContext, sessionId: string): Promise<InterviewReviewSubmissionResult>
   referenceAnswer(context: RequestContext, sessionId: string, questionId: string | number): Promise<{ reference_answer: string; cached: boolean }>
-  resume(context: RequestContext, sessionId: string): Promise<Record<string, unknown>>
+  resume(context: RequestContext, sessionId: string): Promise<InterviewResumeResult>
   review(context: RequestContext, sessionId: string): Promise<InterviewSession>
   history(context: RequestContext, input: { limit?: number; offset?: number; mode?: InterviewMode; topic?: string }): Promise<{ items: SessionSummary[]; total: number }>
   delete(context: RequestContext, sessionId: string): Promise<{ ok: true }>
   topics(context: RequestContext): Promise<string[]>
-  task(context: RequestContext, taskId: string): Promise<Record<string, unknown>>
+  task(context: RequestContext, taskId: string): Promise<TaskStatusResult>
   runReviewTask(task: TaskRecord): Promise<Record<string, unknown> | undefined>
 }
 

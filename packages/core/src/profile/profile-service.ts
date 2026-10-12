@@ -1,15 +1,16 @@
 import type { RequestContext } from '../kernel/context.ts'
 import { AppError, AuthenticationError } from '../kernel/errors.ts'
 import { parseJsonResponse } from '../kernel/json.ts'
+import { enumValue, finiteNumber, objectArray, record, requiredText, textValue, StructuredOutputError } from '../kernel/structured-output.ts'
 import { STRUCTURED_CHAT_OPTIONS } from '../provider/ports.ts'
 import type { CandidateProfilePort } from '../interview/ports.ts'
 import type { InterviewSession, TaskRecord } from '../interview/model.ts'
 import { fill } from '../interview/prompts.ts'
-import { defaultProfile, type CandidateProfile, type WeakPoint } from './model.ts'
+import { defaultProfile, type CandidateProfile, type PendingProfileMemory, type ProfileViewMarker, type RetrospectiveResult, type WeakPoint } from './model.ts'
 import type { ProfileDependencies, ProfileMemoryEntry, ProfileMemorySearchResult, ProfileUseCases } from './ports.ts'
 
 const INFER_ROLE_PROMPT = `根据以下简历内容，推断候选人最可能应聘的岗位名称。给出一个具体岗位，12 个汉字以内；学生可带实习生或校招后缀。只返回岗位名称，不要解释。\n\n{resume}`
-const EXTRACT_PROMPT = `你是面试教练分析引擎。根据本次面试记录提取结构化洞察。不要把表达习惯混入知识弱点，不得编造记录中没有的事实。\n\n模式：{mode}\n领域：{topic}\n对话：\n{transcript}\n\n逐题评分：\n{scores}\n\n现有行为信号（尽量复用 ID）：\n{existing_behavior_signals}\n\n复盘：\n{review}\n\n只返回 JSON：{"session_summary":"摘要","weak_points":[{"point":"具体知识薄弱点","topic":"领域"}],"strong_points":[{"point":"具体知识强项","topic":"领域"}],"behavior_signals":[{"action":"ADD|UPDATE|IMPROVE|NOOP","id":"reasoning.example","namespace":"reasoning","polarity":"negative","description":"行为描述","snippet":"本次新证据","evidence_snippet":"改善证据"}],"topic_mastery":{"notes":"掌握情况"},"avg_score":7,"dimension_scores":{"technical_depth":7,"project_articulation":7,"communication":7,"problem_solving":7}}。仅 resume 模式返回四维 dimension_scores，其他模式省略。avg_score 为有效维度的平均分，保留一位小数。`
+const EXTRACT_PROMPT = `你是面试教练分析引擎。根据本次面试记录提取结构化洞察。不要把表达习惯混入知识弱点，不得编造记录中没有的事实。\n\n模式：{mode}\n领域：{topic}\n对话：\n{transcript}\n\n逐题评分：\n{scores}\n\n现有行为信号（尽量复用 ID）：\n{existing_behavior_signals}\n\n复盘：\n{review}\n\n只返回 JSON：{"session_summary":"摘要","weak_points":[{"point":"具体知识薄弱点","topic":"领域"}],"strong_points":[{"point":"具体知识强项","topic":"领域"}],"behavior_signals":[{"action":"ADD|UPDATE|IMPROVE|NOOP","id":"reasoning.example","namespace":"reasoning","polarity":"negative","description":"行为描述","snippet":"本次新证据","evidence_snippet":"改善证据"}],"topic_mastery":{"notes":"掌握情况"},"avg_score":7,"dimension_scores":{"technical_depth":7,"project_articulation":7,"communication":7,"problem_solving":7}}。仅 resume 模式返回四维 dimension_scores，其他模式省略。avg_score 为有效维度的平均分，保留一位小数。行为信号按 action 提供内容：ADD 必须有非空 description 和 snippet；UPDATE 必须有非空 snippet；IMPROVE 必须有非空 evidence_snippet；NOOP 不应用变更。各 action 不适用的文本字段可以省略或填空字符串，但不能使用 null、对象或数组。`
 const RETROSPECTIVE_PROMPT = `你是面试教练，请基于「{topic_name}」的多次训练历史生成一份适合窄卡片阅读的 Markdown 回顾。总结整体诊断、逐题得分与依据、进步趋势、稳定强项、反复薄弱点，并给出下一轮训练计划。每个判断必须能在历史中找到依据，不得编造训练记录之外的事实。
 
 当前掌握度：{mastery}
@@ -58,6 +59,9 @@ const WEAK_POINT_SIMILARITY = 0.75
 const REVIEW_SIMILARITY = 0.6
 const MEMORY_HALF_LIFE_DAYS = 14
 const MEMORY_DECAY_WEIGHT = 0.3
+const MEMORY_CANDIDATE_COUNT = 20
+const MEMORY_ITEM_CHARS = 600
+const MEMORY_CONTEXT_CHARS = 2000
 const CONSOLIDATION_MIN_ACTIVE = 5
 const CONSOLIDATION_COOLDOWN_MS = 24 * 60 * 60 * 1000
 
@@ -65,6 +69,125 @@ function id(context: RequestContext): string { if (!context.userId) throw new Au
 function object(value: unknown): Record<string, unknown> { return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {} }
 function number(value: unknown): number | undefined { return typeof value === 'number' && Number.isFinite(value) ? value : undefined }
 function text(value: unknown): string { return typeof value === 'string' ? value.trim() : '' }
+
+function validateProfileObservation(value: unknown, path: string, weak: boolean): void {
+  const item = record(value, path)
+  requiredText(item.point, `${path}.point`)
+  if (item.topic !== undefined) requiredText(item.topic, `${path}.topic`)
+  if (item.score !== undefined) finiteNumber(item.score, `${path}.score`, 0, 10)
+  if (item.confidence !== undefined) finiteNumber(item.confidence, `${path}.confidence`, 0, 1)
+  // These known persisted fields survive observation spreads. Check them before
+  // any write, while preserving genuinely unknown provider extensions.
+  for (const field of ['first_seen', 'last_seen', 'improved_at', 'archived_at', 'archived_reason', 'source', 'axis']) {
+    if (item[field] !== undefined) textValue(item[field], `${path}.${field}`)
+  }
+  if (item.times_seen !== undefined) finiteNumber(item.times_seen, `${path}.times_seen`)
+  for (const field of ['improved', 'archived', ...(weak ? ['user_acknowledged'] : [])]) {
+    if (item[field] !== undefined && typeof item[field] !== 'boolean') throw new StructuredOutputError('expected a boolean', `${path}.${field}`)
+  }
+  if (item.history !== undefined) {
+    objectArray(item.history, `${path}.history`).forEach((event, index) => {
+      for (const field of ['date', 'event', 'evidence']) if (event[field] !== undefined) textValue(event[field], `${path}.history[${index}].${field}`)
+      if (event.score !== undefined) finiteNumber(event.score, `${path}.history[${index}].score`, 0, 10)
+    })
+  }
+  if (weak && item.sr !== undefined) {
+    const sr = record(item.sr, `${path}.sr`)
+    for (const field of ['interval_days', 'ease_factor', 'repetitions', 'last_score']) if (sr[field] !== undefined) finiteNumber(sr[field], `${path}.sr.${field}`)
+    if (sr.next_review !== undefined) textValue(sr.next_review, `${path}.sr.next_review`)
+  }
+  if (weak && item.consolidates !== undefined) {
+    if (!Array.isArray(item.consolidates)) throw new StructuredOutputError('expected an array', `${path}.consolidates`)
+    item.consolidates.forEach((point, index) => textValue(point, `${path}.consolidates[${index}]`))
+  }
+}
+
+function validateProfileExtraction(value: unknown): Record<string, unknown> {
+  const source = record(value)
+  requiredText(source.session_summary, 'session_summary')
+  for (const field of ['weak_points', 'strong_points', 'behavior_signals']) if (!Array.isArray(source[field])) throw new StructuredOutputError('expected an array', field)
+  const weakPoints = source.weak_points as unknown[]
+  const strongPoints = source.strong_points as unknown[]
+  for (const [name, items] of [['weak_points', weakPoints], ['strong_points', strongPoints] ] as const) {
+    items.forEach((raw, index) => validateProfileObservation(raw, `${name}[${index}]`, name === 'weak_points'))
+  }
+  const behaviorSignals = source.behavior_signals as unknown[]
+  const behaviorIds = new Set<string>()
+  behaviorSignals.forEach((raw, index) => {
+    const item = record(raw, `behavior_signals[${index}]`)
+    const action = enumValue(item.action, ['ADD', 'UPDATE', 'IMPROVE', 'NOOP'] as const, `behavior_signals[${index}].action`)
+    const signalId = requiredText(item.id, `behavior_signals[${index}].id`)
+    if (behaviorIds.has(signalId)) throw new StructuredOutputError('IDs must be unique', `behavior_signals[${index}].id`)
+    behaviorIds.add(signalId)
+    const match = signalId.match(BEHAVIOR_ID)
+    if (!match || !BEHAVIOR_NAMESPACES.has(match[1]!)) throw new StructuredOutputError('invalid behavior signal id', `behavior_signals[${index}].id`)
+    if (item.namespace !== undefined) {
+      requiredText(item.namespace, `behavior_signals[${index}].namespace`)
+      if (item.namespace !== match[1]) throw new StructuredOutputError('namespace must match id', `behavior_signals[${index}].namespace`)
+    } else item.namespace = match[1]
+    if (item.polarity !== undefined) enumValue(item.polarity, ['positive', 'negative'] as const, `behavior_signals[${index}].polarity`)
+    for (const field of ['description', 'snippet', 'evidence_snippet']) if (item[field] !== undefined) textValue(item[field], `behavior_signals[${index}].${field}`)
+    if (action === 'ADD') requiredText(item.description, `behavior_signals[${index}].description`)
+    if (action === 'ADD' || action === 'UPDATE') requiredText(item.snippet, `behavior_signals[${index}].snippet`)
+    if (action === 'IMPROVE') requiredText(item.evidence_snippet, `behavior_signals[${index}].evidence_snippet`)
+  })
+  if (source.avg_score !== undefined) finiteNumber(source.avg_score, 'avg_score', 0, 10)
+  if (source.dimension_scores !== undefined) {
+    const dimensions = record(source.dimension_scores, 'dimension_scores')
+    for (const [key, value] of Object.entries(dimensions)) finiteNumber(value, `dimension_scores.${key}`, 0, 10)
+  }
+  if (source.topic_mastery !== undefined) {
+    const mastery = record(source.topic_mastery, 'topic_mastery')
+    for (const [topic, raw] of Object.entries(mastery)) {
+      // The extraction prompt permits a compact top-level { notes } object
+      // when no per-topic mastery details are available.
+      if (topic === 'notes' && typeof raw === 'string') continue
+      const item = record(raw, `topic_mastery.${topic}`)
+      if (item.score !== undefined) finiteNumber(item.score, `topic_mastery.${topic}.score`, 0, 100)
+      if (item.coverage !== undefined) finiteNumber(item.coverage, `topic_mastery.${topic}.coverage`, 0, 1)
+      if (item.notes !== undefined) requiredText(item.notes, `topic_mastery.${topic}.notes`)
+    }
+  }
+  return source
+}
+
+function validateConsolidation(value: unknown, active: readonly WeakPoint[]): Array<Record<string, unknown>> {
+  const source = record(value)
+  if (!Array.isArray(source.patterns)) throw new StructuredOutputError('expected an array', 'patterns')
+  return source.patterns.map((raw, index) => {
+    const item = record(raw, `patterns[${index}]`)
+    const statement = requiredText(item.statement, `patterns[${index}].statement`)
+    if (statement.length > 80) throw new StructuredOutputError('must be at most 80 characters', `patterns[${index}].statement`)
+    if (!Array.isArray(item.supporting_wp_indices)) throw new StructuredOutputError('expected an array', `patterns[${index}].supporting_wp_indices`)
+    const indexes = item.supporting_wp_indices.map((rawIndex, itemIndex) => {
+      if (!Number.isInteger(rawIndex) || (rawIndex as number) < 0 || (rawIndex as number) >= active.length) throw new StructuredOutputError('invalid weak point index', `patterns[${index}].supporting_wp_indices[${itemIndex}]`)
+      return rawIndex as number
+    })
+    if (new Set(indexes).size !== indexes.length || indexes.length < 2) throw new StructuredOutputError('must contain at least two unique weak point indexes', `patterns[${index}].supporting_wp_indices`)
+    if (new Set(indexes.map((itemIndex) => active[itemIndex]?.topic).filter(Boolean)).size < 2) throw new StructuredOutputError('must span at least two topics', `patterns[${index}].supporting_wp_indices`)
+    if (item.topic !== undefined) requiredText(item.topic, `patterns[${index}].topic`)
+    if (item.confidence !== undefined) finiteNumber(item.confidence, `patterns[${index}].confidence`, 0, 1)
+    return item
+  })
+}
+
+function sessionMemory(extraction: Record<string, unknown>, session: InterviewSession, createdAt: string): PendingProfileMemory {
+  const weak = (Array.isArray(extraction.weak_points) ? extraction.weak_points : []).map(object).filter(item => text(item.point))
+  const strong = (Array.isArray(extraction.strong_points) ? extraction.strong_points : []).map(object).filter(item => text(item.point))
+  const summary = text(extraction.session_summary)
+  const insight = [summary, weak.length ? `薄弱点：${weak.map(item => text(item.point)).join('、')}` : '', strong.length ? `强项：${strong.map(item => text(item.point)).join('、')}` : ''].filter(Boolean).join('\n').slice(0, 2000)
+  const entries: PendingProfileMemory['entries'] = []
+  if (summary) entries.push({ chunkType: 'session_summary', content: summary, topic: session.topic || undefined, metadata: { mode: session.mode } })
+  if (insight) entries.push({ chunkType: 'insight', content: insight, topic: session.topic || undefined, metadata: { mode: session.mode } })
+  for (const item of weak) entries.push({ chunkType: 'weak_point', content: text(item.point), topic: text(item.topic) || session.topic || undefined, metadata: { source: text(item.source) || 'observed' } })
+  return { createdAt, entries }
+}
+
+function trimExtractions(profile: CandidateProfile): void {
+  const extractions = object(profile.session_extractions)
+  const completed = Object.keys(extractions).filter(key => !profile._pending_memory?.[key])
+  for (const stale of completed.slice(0, -100)) delete extractions[stale]
+}
 
 function normalized(value: string): string { return value.toLocaleLowerCase().replace(/[\s\p{P}\p{S}]+/gu, '') }
 
@@ -290,17 +413,40 @@ export class ProfileService implements ProfileUseCases, CandidateProfilePort {
 
   async semanticHistory(userId: string, topic: string, query = `${topic} 面试薄弱点 常见错误`, topK = 3): Promise<ProfileMemorySearchResult[]> {
     try {
-      const rows = await this.deps.vectors.listProfileMemories({ userId, chunkTypes: ['session_summary', 'insight'], topic })
+      const rows = await this.deps.vectors.listProfileMemories({ userId, chunkTypes: ['session_summary', 'insight'] })
       if (!rows.length) return []
       const queryVector = (await this.deps.embeddings.embed(this.context(userId, 'memory-search'), [query]))[0]
       if (!queryVector) return []
       const now = Date.now()
-      return rows.map((row) => {
+      const ranked = rows.map((row) => {
         const timestamp = Date.parse(row.createdAt)
         const age = Number.isFinite(timestamp) ? Math.max(0, (now - timestamp) / 86_400_000) : 0
         const decay = MEMORY_DECAY_WEIGHT * (0.5 ** (age / MEMORY_HALF_LIFE_DAYS)) + (1 - MEMORY_DECAY_WEIGHT)
         return { chunkType: row.chunkType, content: row.content, ...(row.topic ? { topic: row.topic } : {}), ...(row.sessionId ? { sessionId: row.sessionId } : {}), createdAt: row.createdAt, score: cosine(queryVector, row.embedding) * decay }
-      }).sort((left, right) => right.score - left.score).slice(0, Math.max(1, topK))
+      }).filter((row) => Number.isFinite(row.score) && row.score > 0 && row.content.trim()).sort((left, right) => right.score - left.score).slice(0, MEMORY_CANDIDATE_COUNT)
+      const sessions = new Map<string, ProfileMemorySearchResult>()
+      const candidates: ProfileMemorySearchResult[] = []
+      for (const row of ranked) {
+        const existing = row.sessionId ? sessions.get(row.sessionId) : undefined
+        if (existing) {
+          // An insight already contains its session summary. Keep that richer
+          // representation at the session's best decayed relevance score.
+          if (row.chunkType === 'insight' && existing.chunkType !== 'insight') {
+            Object.assign(existing, row, { score: existing.score })
+          }
+        } else {
+          const candidate = { ...row }
+          candidates.push(candidate)
+          if (row.sessionId) sessions.set(row.sessionId, candidate)
+        }
+      }
+      const seen = new Set<string>()
+      return candidates.filter((row) => {
+        const content = row.content.trim()
+        if (seen.has(content)) return false
+        seen.add(content)
+        return true
+      }).slice(0, Math.max(1, topK))
     } catch { return [] }
   }
 
@@ -314,10 +460,38 @@ export class ProfileService implements ProfileUseCases, CandidateProfilePort {
     try { await this.deps.vectors.appendProfileMemories({ userId, entries: stored }) } catch { /* profile.json remains the source of truth */ }
   }
 
+  private async projectSessionMemory(userId: string, sessionId: string, pending: PendingProfileMemory | undefined): Promise<void> {
+    if (!pending) return
+    // Unlike optional semantic matching, this write must succeed as a whole or remain retryable.
+    const vectors = pending.entries.length ? await this.deps.embeddings.embed(this.context(userId, 'memory-write'), pending.entries.map(entry => entry.content)) : []
+    const dimension = vectors[0]?.length || 0
+    if (vectors.length !== pending.entries.length || vectors.some(vector => !dimension || vector.length !== dimension || !vector.every(Number.isFinite))) {
+      throw new Error('Invalid memory embeddings')
+    }
+    await this.deps.vectors.replaceSessionMemories({
+      userId, sessionId,
+      entries: pending.entries.map((entry, index) => ({ ...entry, sessionId, embedding: vectors[index]!, createdAt: pending.createdAt })),
+    })
+    // A crash before this acknowledgement is safe: the next attempt replaces the same session.
+    await this.deps.repository.update(userId, profile => {
+      delete profile._pending_memory?.[sessionId]
+      if (!Object.keys(profile._pending_memory || {}).length) delete profile._pending_memory
+      // Keep a just-recovered session in the recent completed cache, even if it failed long ago.
+      const extractions = object(profile.session_extractions)
+      if (Object.hasOwn(extractions, sessionId)) {
+        const extraction = extractions[sessionId]
+        delete extractions[sessionId]
+        extractions[sessionId] = extraction
+      }
+      trimExtractions(profile)
+    })
+  }
+
   async get(context: RequestContext): Promise<CandidateProfile> {
     const userId = id(context)
     const profile = await this.profile(userId)
-    return { ...profile, due_reviews: (await this.dueReviews(context)).map((point) => ({ point: point.point, topic: point.topic, next_review: object(point.sr).next_review })) }
+    const { _pending_memory: _, ...publicProfile } = profile
+    return { ...publicProfile, due_reviews: (await this.dueReviews(context)).map((point) => ({ point: point.point, topic: point.topic, next_review: object(point.sr).next_review })) }
   }
 
   async targetRole(userId: string): Promise<string> { return (await this.profile(userId)).target_role || '' }
@@ -338,7 +512,7 @@ export class ProfileService implements ProfileUseCases, CandidateProfilePort {
     })
   }
 
-  async summary(userId: string, topic?: string): Promise<string> {
+  async summary(userId: string, topic?: string, memoryQuery?: string): Promise<string> {
     const profile = await this.profile(userId)
     const parts: string[] = []
     const weak = profile.weak_points.filter((point) => point.source !== 'consolidated' && !point.improved && !point.archived && point.axis !== 'performance' && (!topic || point.topic === topic)).sort((a, b) => salience(b) - salience(a)).slice(0, topic ? 10 : 6)
@@ -356,8 +530,17 @@ export class ProfileService implements ProfileUseCases, CandidateProfilePort {
       const today = new Date().toISOString().slice(0, 10)
       const due = profile.weak_points.filter((point) => point.topic === topic && point.source !== 'consolidated' && !point.improved && !point.archived && point.axis !== 'performance' && String(object(point.sr).next_review || '2000-01-01') <= today).sort((left, right) => Number(object(left.sr).ease_factor || 2.5) - Number(object(right.sr).ease_factor || 2.5)).slice(0, 5)
       if (due.length) parts.push(`本轮到期复习：${due.map((point) => point.point).join('、')}`)
-      const insights = (await this.semanticHistory(userId, topic)).filter((item) => item.score > 0.3).filter((item, index, values) => values.findIndex((candidate) => candidate.content === item.content) === index)
-      if (insights.length) parts.push(`历史语义洞察：\n${insights.map((item) => `- ${item.content}`).join('\n')}`)
+      const query = [
+        `检索有助于本轮专项训练的历史表现。训练主题：${topic}`,
+        memoryQuery?.trim().slice(0, 1500),
+        due.length ? `优先复习：${due.map((point) => point.point).join('、').slice(0, 400)}` : '',
+        weak.length ? `当前薄弱点：${weak.map((point) => point.point).join('、').slice(0, 400)}` : '',
+      ].filter(Boolean).join('\n')
+      const insights = await this.semanticHistory(userId, topic, query)
+      if (insights.length) {
+        const history = insights.map((item) => `- [${item.topic || '未分类'} · ${item.createdAt.slice(0, 10)}] ${item.content.slice(0, MEMORY_ITEM_CHARS)}`).join('\n').slice(0, MEMORY_CONTEXT_CHARS)
+        parts.push(`历史语义洞察（历史表现，以当前画像的改善和纠正状态为准）：\n${history}`)
+      }
     }
     return parts.join('\n') || '新用户，暂无历史数据'
   }
@@ -370,7 +553,7 @@ export class ProfileService implements ProfileUseCases, CandidateProfilePort {
     return { target_role: role }
   }
 
-  async viewed(context: RequestContext): Promise<Record<string, unknown>> {
+  async viewed(context: RequestContext): Promise<ProfileViewMarker> {
     return this.deps.repository.update(id(context), (profile) => {
       const marker = { at: new Date().toISOString(), total_sessions: Number(profile.stats?.total_sessions || 0), topic_scores: Object.fromEntries(Object.entries(profile.topic_mastery || {}).map(([topic, mastery]) => [topic, Number(mastery.score ?? Number(mastery.level || 0) * 20)])) }
       profile.view_marker = marker
@@ -378,7 +561,7 @@ export class ProfileService implements ProfileUseCases, CandidateProfilePort {
     })
   }
 
-  async feedback(context: RequestContext, point: string, verdict: string): Promise<Record<string, unknown>> {
+  async feedback(context: RequestContext, point: string, verdict: string): Promise<WeakPoint> {
     if (!point.trim() || !['accurate', 'inaccurate', 'acknowledged'].includes(verdict)) throw new AppError('需要 point 和 verdict (accurate|inaccurate|acknowledged)', 400)
     const updated = await this.deps.repository.update(id(context), (profile) => {
       const target = profile.weak_points.find((item) => item.source === 'consolidated' && item.point === point && !item.archived)
@@ -395,7 +578,7 @@ export class ProfileService implements ProfileUseCases, CandidateProfilePort {
     return updated
   }
 
-  async dueReviews(context: RequestContext, topic?: string): Promise<Array<Record<string, unknown>>> {
+  async dueReviews(context: RequestContext, topic?: string): Promise<WeakPoint[]> {
     const today = new Date().toISOString().slice(0, 10)
     return (await this.profile(id(context))).weak_points.filter((point) => !point.improved && !point.archived && point.source !== 'consolidated' && point.axis !== 'performance' && (!topic || point.topic === topic) && String(object(point.sr).next_review || '2000-01-01') <= today).sort((a, b) => Number(object(a.sr).ease_factor || 2.5) - Number(object(b.sr).ease_factor || 2.5))
   }
@@ -411,7 +594,7 @@ export class ProfileService implements ProfileUseCases, CandidateProfilePort {
     return { task_id: taskId, status: 'pending' as const }
   }
 
-  async runRetrospectiveTask(task: TaskRecord): Promise<Record<string, unknown>> {
+  async runRetrospectiveTask(task: TaskRecord): Promise<RetrospectiveResult> {
     const topic = String(task.payload.topic || '')
     const sessions = await this.deps.sessions.reviewedByTopic(task.user_id, topic)
     if (!sessions.length) throw new Error('该领域暂无训练记录')
@@ -434,13 +617,13 @@ export class ProfileService implements ProfileUseCases, CandidateProfilePort {
     const last = Date.parse(profile.last_consolidation_at || '')
     if (Number.isFinite(last) && Date.now() - last < CONSOLIDATION_COOLDOWN_MS) return
     const formatted = active.map((point, index) => `[${index}] ${point.point} (领域: ${point.topic || '未知'}, 观察 ${point.times_seen || 1} 次)`).join('\n')
-    let patterns: unknown[]
+    let patterns: Array<Record<string, unknown>>
     try {
       const parsed = parseJsonResponse(await this.deps.ai.complete(this.context(userId, 'consolidation'), [
         { role: 'system', content: '你是模式识别引擎。只返回 JSON。' },
         { role: 'user', content: fill(CONSOLIDATION_PROMPT, { weak_points: formatted }) },
       ], STRUCTURED_CHAT_OPTIONS))
-      patterns = Array.isArray(object(parsed).patterns) ? object(parsed).patterns as unknown[] : []
+      patterns = validateConsolidation(parsed, active)
     } catch { return }
 
     const created = await this.deps.repository.update(userId, (current) => {
@@ -476,14 +659,17 @@ export class ProfileService implements ProfileUseCases, CandidateProfilePort {
   async afterReview(input: { userId: string; session: InterviewSession }): Promise<Record<string, unknown>> {
     const before = await this.profile(input.userId)
     const cached = object(object(before.session_extractions)[input.session.session_id])
-    if (Object.keys(cached).length) return cached
+    if (Object.hasOwn(object(before.session_extractions), input.session.session_id)) {
+      await this.projectSessionMemory(input.userId, input.session.session_id, before._pending_memory?.[input.session.session_id])
+      return cached
+    }
     const transcript = input.session.transcript.map((message) => `${message.role === 'user' ? '候选人' : '面试官'}: ${message.content}`).join('\n')
     const context = this.context(input.userId, input.session.session_id)
     let extraction: Record<string, unknown> | undefined
     for (let attempt = 0; attempt < 2 && !extraction; attempt += 1) {
       try {
         const parsed = parseJsonResponse(await this.deps.ai.complete(context, [{ role: 'system', content: '你是面试分析引擎。只返回 JSON。' }, { role: 'user', content: fill(EXTRACT_PROMPT, { mode: input.session.mode, topic: input.session.topic || '综合', transcript, scores: JSON.stringify(input.session.scores), existing_behavior_signals: behaviorSummary(before), review: input.session.review || '' }) }], STRUCTURED_CHAT_OPTIONS))
-        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) extraction = parsed
+        extraction = validateProfileExtraction(parsed)
       }
       catch { /* retry once */ }
     }
@@ -499,7 +685,10 @@ export class ProfileService implements ProfileUseCases, CandidateProfilePort {
     const vectors = await this.vectorsFor(input.userId, embeddingTexts, 'profile-update')
     const overallScore = number(object(input.session.overall).avg_score) ?? number(extraction.avg_score) ?? roundedAverage(input.session.scores.map((score) => number(score.score)).filter((score): score is number => score !== undefined)) ?? 5
 
-    await this.deps.repository.update(input.userId, (profile) => {
+    const applied = await this.deps.repository.update(input.userId, (profile) => {
+      // The initial load happens before LLM/embedding I/O; recheck under the repository lock.
+      const existing = object(object(profile.session_extractions)[input.session.session_id])
+      if (Object.hasOwn(object(profile.session_extractions), input.session.session_id)) return { extraction: existing, pending: profile._pending_memory?.[input.session.session_id], fresh: false }
       prepare(profile)
       const reviewed = new Set<WeakPoint>()
       for (const item of weak) {
@@ -546,19 +735,17 @@ export class ProfileService implements ProfileUseCases, CandidateProfilePort {
       updateStats(profile, input.session, extraction!, now)
       const extractions = object(profile.session_extractions)
       extractions[input.session.session_id] = extraction!
-      for (const stale of Object.keys(extractions).slice(0, -100)) delete extractions[stale]
       profile.session_extractions = extractions
+      const pending = sessionMemory(extraction!, input.session, now)
+      profile._pending_memory ||= {}
+      profile._pending_memory[input.session.session_id] = pending
+      trimExtractions(profile)
       profile.updated_at = now
+      return { extraction: extraction!, pending, fresh: true }
     })
 
-    const summary = text(extraction.session_summary)
-    const insight = [summary, weak.length ? `薄弱点：${weak.map((item) => text(item.point)).join('、')}` : '', strong.length ? `强项：${strong.map((item) => text(item.point)).join('、')}` : ''].filter(Boolean).join('\n').slice(0, 2000)
-    const memories: Array<Omit<ProfileMemoryEntry, 'embedding' | 'createdAt'>> = []
-    if (summary) memories.push({ chunkType: 'session_summary', content: summary, topic: input.session.topic || undefined, sessionId: input.session.session_id, metadata: { mode: input.session.mode } })
-    if (insight) memories.push({ chunkType: 'insight', content: insight, topic: input.session.topic || undefined, sessionId: input.session.session_id, metadata: { mode: input.session.mode } })
-    for (const item of weak) memories.push({ chunkType: 'weak_point', content: text(item.point), topic: text(item.topic) || input.session.topic || undefined, sessionId: input.session.session_id, metadata: { source: text(item.source) || 'observed' } })
-    await this.appendMemories(input.userId, memories, now)
-    await this.consolidate(input.userId, now)
-    return extraction
+    await this.projectSessionMemory(input.userId, input.session.session_id, applied.pending)
+    if (applied.fresh) await this.consolidate(input.userId, now)
+    return applied.extraction
   }
 }
