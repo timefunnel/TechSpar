@@ -20,6 +20,7 @@ import {
   DialogTitle,
 } from "@/resume/ui/dialog";
 import ThemeModal from "@/resume/shared/ThemeModal";
+import ResumeAdviceDialog from "@/resume/advice/ResumeAdviceDialog";
 import { useResumeStore } from "@/resume/store/useResumeStore";
 import { getResumeAccount } from "@/resume/store/resumeAccount";
 import {
@@ -197,6 +198,7 @@ export default function PdfResumeSection() {
             <div className="text-xs text-dim">{formatFileSize(status.size)}</div>
           </div>
           <div className="flex flex-wrap items-center gap-1.5">
+            <ResumeAdviceDialog onParse={() => void handleParse()} />
             <Button variant="ghost" size="sm" className="gap-1.5" onClick={handlePreview}>
               <Eye className="h-4 w-4" /> 预览
             </Button>

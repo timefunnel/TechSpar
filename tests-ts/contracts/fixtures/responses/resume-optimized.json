@@ -1,0 +1,8 @@
+{
+  "ok": true,
+  "optimization": {
+    "summary": "将泛泛职责改为直接陈述，未新增事实。",
+    "missing_information": ["请补充实际负责的接口范围"],
+    "changes": [{ "field_id": "experience:job-a", "label": "工作经历 · 示例公司", "before": "负责接口开发", "after": "开发并维护业务接口。", "reason": "突出具体行动" }]
+  }
+}

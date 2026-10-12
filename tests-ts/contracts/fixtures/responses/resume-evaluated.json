@@ -1,0 +1,18 @@
+{
+  "ok": true,
+  "assessment": {
+    "overall_score": 70,
+    "summary": "项目职责较清晰，需要补充技术实现与成果口径。",
+    "dimensions": {
+      "clarity": { "score": 70, "rationale": "能区分工作和项目经历。" },
+      "impact": { "score": 70, "rationale": "有结果，但未注明统计口径。" },
+      "technical_depth": { "score": 70, "rationale": "原文提供了异步消息处理方法。" },
+      "completeness": { "score": 70, "rationale": "部分项目时间未提供。" },
+      "credibility": { "score": 70, "rationale": "个人与团队贡献需进一步明确。" }
+    },
+    "strengths": ["具备后端项目实践"],
+    "issues": [{ "severity": "medium", "location": "项目经历", "evidence": "原文未提供项目时间", "suggestion": "补充真实起止时间" }],
+    "missing_information": ["项目起止时间"],
+    "role_match": null
+  }
+}

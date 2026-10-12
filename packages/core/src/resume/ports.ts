@@ -1,5 +1,8 @@
 import type { RequestContext } from '../kernel/context.ts'
 import type { TextGenerationUseCases } from '../provider/ports.ts'
+import type { ResumeAssessment, ResumeEvaluateInput, ResumeOptimizeInput, ResumeOptimization } from '@techspar/contracts'
+
+export type { ResumeAssessment, ResumeEvaluateInput, ResumeOptimizeInput, ResumeOptimization } from '@techspar/contracts'
 
 export type ResumeStatus = { has_resume: false } | { has_resume: true; filename: string; size: number }
 export type ResumeFile = { filename: string; bytes: Uint8Array }
@@ -30,6 +33,8 @@ export interface ResumeUseCases {
   delete(context: RequestContext): Promise<{ ok: true }>
   text(context: RequestContext): Promise<string>
   parse(context: RequestContext): Promise<{ ok: true; parsed: Record<string, unknown> }>
+  evaluate(context: RequestContext, input: ResumeEvaluateInput): Promise<{ ok: true; assessment: ResumeAssessment }>
+  optimize(context: RequestContext, input: ResumeOptimizeInput): Promise<{ ok: true; optimization: ResumeOptimization }>
   transcribe(context: RequestContext, filename: string, bytes: Uint8Array): Promise<{ text: string }>
 }
 

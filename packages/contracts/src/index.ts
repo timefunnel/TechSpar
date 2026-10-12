@@ -5,6 +5,7 @@ export * from './interview-responses.ts'
 export * from './task-responses.ts'
 export * from './profile-responses.ts'
 export * from './copilot-audio.ts'
+export * from './resume-advice.ts'
 
 const UploadedFileSchema = z.instanceof(File).meta({ type: 'string', format: 'binary' })
 

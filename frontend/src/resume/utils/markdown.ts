@@ -48,6 +48,7 @@ const DEFAULT_BASIC_FIELD_LABELS: Record<ExportableBasicFieldKey, string> = {
 
 export interface ResumeMarkdownOptions {
   basicFieldLabels?: Partial<Record<ExportableBasicFieldKey, string>>;
+  strictSections?: boolean;
 }
 
 const normalizeText = (value?: string) => value?.trim() || "";
@@ -64,7 +65,7 @@ const createTurndownService = () =>
     bulletListMarker: "-"
   });
 
-const markdownFromText = (value?: string) => {
+export const markdownFromText = (value?: string) => {
   const normalized = normalizeText(value);
   if (!normalized) return "";
 
@@ -87,12 +88,12 @@ const pickBasicFieldValue = (
   key: ExportableBasicFieldKey
 ) => normalizeText((basic[key] as string | undefined) || "");
 
-const getOrderedEnabledSections = (resume: ResumeData): MenuSection[] => {
+const getOrderedEnabledSections = (resume: ResumeData, strict = false): MenuSection[] => {
   const enabledSections = (resume.menuSections || [])
     .filter((section) => section.enabled)
     .sort((a, b) => a.order - b.order);
 
-  if (enabledSections.length > 0) return enabledSections;
+  if (strict || enabledSections.length > 0) return enabledSections;
 
   return [
     { id: "basic", title: DEFAULT_BASIC_SECTION_TITLES.basic, icon: "", enabled: true, order: 0 },
@@ -302,7 +303,7 @@ export const generateResumeMarkdown = (
   options?: ResumeMarkdownOptions
 ) => {
   const topTitle = normalizeText(resume.title) || "Resume";
-  const sections = getOrderedEnabledSections(resume);
+  const sections = getOrderedEnabledSections(resume, options?.strictSections);
   const blocks: string[] = [`# ${topTitle}`];
 
   for (const section of sections) {

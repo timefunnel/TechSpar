@@ -13,6 +13,7 @@ import {
   TooltipTrigger,
 } from "@/resume/ui/tooltip";
 import { Button } from "@/resume/ui/button";
+import ResumeAdviceDialog from "../advice/ResumeAdviceDialog";
 
 interface EditorHeaderProps {
   isMobile?: boolean;
@@ -102,6 +103,7 @@ export function EditorHeader(_props: EditorHeaderProps) {
         </div>
 
         <div className="flex items-center space-x-3">
+          {activeResume && <ResumeAdviceDialog key={activeResume.id} resumeId={activeResume.id} />}
           <div className="hidden md:flex items-center gap-1">
             <TooltipProvider delayDuration={100}>
               <Tooltip>

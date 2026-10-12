@@ -121,6 +121,9 @@
     "packages/core": {
       "name": "@techspar/core",
       "version": "0.4.1",
+      "dependencies": {
+        "@techspar/contracts": "workspace:*",
+      },
     },
     "packages/db": {
       "name": "@techspar/db",

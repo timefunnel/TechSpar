@@ -6,6 +6,10 @@ import {
   ResumeStatusSchema,
   ResumeUploadedSchema,
   ResumeUploadSchema,
+  ResumeEvaluateRequestSchema,
+  ResumeEvaluateResponseSchema,
+  ResumeOptimizeRequestSchema,
+  ResumeOptimizeResponseSchema,
   TranscriptionSchema,
 } from '@techspar/contracts'
 import type { ResumeUseCases, TokenService } from '@techspar/core'
@@ -15,6 +19,12 @@ export function registerResumeRoutes(
   app: OpenAPIHono,
   deps: { resume: ResumeUseCases; tokens: TokenService },
 ): void {
+  app.openapi(createRoute({ method: 'post', path: '/api/resume/evaluate', request: { body: { content: { 'application/json': { schema: ResumeEvaluateRequestSchema } } } }, responses: { 200: { content: { 'application/json': { schema: ResumeEvaluateResponseSchema } }, description: 'Evidence-based resume assessment' } } }),
+    async (c) => c.json(await deps.resume.evaluate(await authenticatedContext(c, deps.tokens), c.req.valid('json'))))
+
+  app.openapi(createRoute({ method: 'post', path: '/api/resume/optimize', request: { body: { content: { 'application/json': { schema: ResumeOptimizeRequestSchema } } } }, responses: { 200: { content: { 'application/json': { schema: ResumeOptimizeResponseSchema } }, description: 'Reviewable resume changes; does not persist or overwrite the source' } } }),
+    async (c) => c.json(await deps.resume.optimize(await authenticatedContext(c, deps.tokens), c.req.valid('json'))))
+
   app.openapi(createRoute({ method: 'get', path: '/api/resume/status', responses: { 200: { content: { 'application/json': { schema: ResumeStatusSchema } }, description: 'Resume status' } } }),
     async (c) => c.json(await deps.resume.status(await authenticatedContext(c, deps.tokens))))
 

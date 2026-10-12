@@ -1372,6 +1372,188 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/resume/evaluate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        /** @enum {string} */
+                        source: "editor";
+                        resume_text: string;
+                        /** @default  */
+                        target_role?: string;
+                        /** @default  */
+                        jd_text?: string;
+                    } | {
+                        /** @enum {string} */
+                        source: "uploaded_pdf";
+                        /** @default  */
+                        target_role?: string;
+                        /** @default  */
+                        jd_text?: string;
+                    };
+                };
+            };
+            responses: {
+                /** @description Evidence-based resume assessment */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            /** @enum {boolean} */
+                            ok: true;
+                            assessment: {
+                                summary: string;
+                                dimensions: {
+                                    clarity: {
+                                        score: number;
+                                        rationale: string;
+                                    };
+                                    impact: {
+                                        score: number;
+                                        rationale: string;
+                                    };
+                                    technical_depth: {
+                                        score: number;
+                                        rationale: string;
+                                    };
+                                    completeness: {
+                                        score: number;
+                                        rationale: string;
+                                    };
+                                    credibility: {
+                                        score: number;
+                                        rationale: string;
+                                    };
+                                };
+                                strengths: string[];
+                                issues: {
+                                    /** @enum {string} */
+                                    severity: "high" | "medium" | "low";
+                                    location: string;
+                                    evidence: string;
+                                    suggestion: string;
+                                }[];
+                                missing_information: string[];
+                                role_match: {
+                                    score: number;
+                                    rationale: string;
+                                    matched: string[];
+                                    gaps: string[];
+                                } | null;
+                                overall_score: number;
+                            };
+                        };
+                    };
+                };
+                /** @description Validation Error */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["HTTPValidationError"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/resume/optimize": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        /** @enum {string} */
+                        source: "editor";
+                        resume_text: string;
+                        /** @default  */
+                        target_role?: string;
+                        /** @default  */
+                        jd_text?: string;
+                        fields: {
+                            id: string;
+                            label: string;
+                            text: string;
+                        }[];
+                    };
+                };
+            };
+            responses: {
+                /** @description Reviewable resume changes; does not persist or overwrite the source */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            /** @enum {boolean} */
+                            ok: true;
+                            optimization: {
+                                summary: string;
+                                missing_information: string[];
+                                changes: {
+                                    field_id: string;
+                                    label: string;
+                                    before: string;
+                                    after: string;
+                                    reason: string;
+                                }[];
+                            };
+                        };
+                    };
+                };
+                /** @description Validation Error */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["HTTPValidationError"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/resume/status": {
         parameters: {
             query?: never;

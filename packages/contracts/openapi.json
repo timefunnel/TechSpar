@@ -4442,6 +4442,534 @@
         ]
       }
     },
+    "/api/resume/evaluate": {
+      "post": {
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "source": {
+                        "type": "string",
+                        "enum": [
+                          "editor"
+                        ]
+                      },
+                      "resume_text": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 40000
+                      },
+                      "target_role": {
+                        "type": "string",
+                        "maxLength": 200,
+                        "default": ""
+                      },
+                      "jd_text": {
+                        "type": "string",
+                        "maxLength": 12000,
+                        "default": ""
+                      }
+                    },
+                    "required": [
+                      "source",
+                      "resume_text"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "source": {
+                        "type": "string",
+                        "enum": [
+                          "uploaded_pdf"
+                        ]
+                      },
+                      "target_role": {
+                        "type": "string",
+                        "maxLength": 200,
+                        "default": ""
+                      },
+                      "jd_text": {
+                        "type": "string",
+                        "maxLength": 12000,
+                        "default": ""
+                      }
+                    },
+                    "required": [
+                      "source"
+                    ],
+                    "additionalProperties": false
+                  }
+                ]
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Evidence-based resume assessment",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
+                    },
+                    "assessment": {
+                      "type": "object",
+                      "properties": {
+                        "summary": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 4000
+                        },
+                        "dimensions": {
+                          "type": "object",
+                          "properties": {
+                            "clarity": {
+                              "type": "object",
+                              "properties": {
+                                "score": {
+                                  "type": "integer",
+                                  "minimum": 0,
+                                  "maximum": 100
+                                },
+                                "rationale": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 4000
+                                }
+                              },
+                              "required": [
+                                "score",
+                                "rationale"
+                              ],
+                              "additionalProperties": false
+                            },
+                            "impact": {
+                              "type": "object",
+                              "properties": {
+                                "score": {
+                                  "type": "integer",
+                                  "minimum": 0,
+                                  "maximum": 100
+                                },
+                                "rationale": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 4000
+                                }
+                              },
+                              "required": [
+                                "score",
+                                "rationale"
+                              ],
+                              "additionalProperties": false
+                            },
+                            "technical_depth": {
+                              "type": "object",
+                              "properties": {
+                                "score": {
+                                  "type": "integer",
+                                  "minimum": 0,
+                                  "maximum": 100
+                                },
+                                "rationale": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 4000
+                                }
+                              },
+                              "required": [
+                                "score",
+                                "rationale"
+                              ],
+                              "additionalProperties": false
+                            },
+                            "completeness": {
+                              "type": "object",
+                              "properties": {
+                                "score": {
+                                  "type": "integer",
+                                  "minimum": 0,
+                                  "maximum": 100
+                                },
+                                "rationale": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 4000
+                                }
+                              },
+                              "required": [
+                                "score",
+                                "rationale"
+                              ],
+                              "additionalProperties": false
+                            },
+                            "credibility": {
+                              "type": "object",
+                              "properties": {
+                                "score": {
+                                  "type": "integer",
+                                  "minimum": 0,
+                                  "maximum": 100
+                                },
+                                "rationale": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 4000
+                                }
+                              },
+                              "required": [
+                                "score",
+                                "rationale"
+                              ],
+                              "additionalProperties": false
+                            }
+                          },
+                          "required": [
+                            "clarity",
+                            "impact",
+                            "technical_depth",
+                            "completeness",
+                            "credibility"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "strengths": {
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 4000
+                          },
+                          "maxItems": 20
+                        },
+                        "issues": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "severity": {
+                                "type": "string",
+                                "enum": [
+                                  "high",
+                                  "medium",
+                                  "low"
+                                ]
+                              },
+                              "location": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 4000
+                              },
+                              "evidence": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 4000
+                              },
+                              "suggestion": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 4000
+                              }
+                            },
+                            "required": [
+                              "severity",
+                              "location",
+                              "evidence",
+                              "suggestion"
+                            ],
+                            "additionalProperties": false
+                          },
+                          "maxItems": 30
+                        },
+                        "missing_information": {
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 4000
+                          },
+                          "maxItems": 20
+                        },
+                        "role_match": {
+                          "type": "object",
+                          "nullable": true,
+                          "properties": {
+                            "score": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 100
+                            },
+                            "rationale": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 4000
+                            },
+                            "matched": {
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 4000
+                              },
+                              "maxItems": 20
+                            },
+                            "gaps": {
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 4000
+                              },
+                              "maxItems": 20
+                            }
+                          },
+                          "required": [
+                            "score",
+                            "rationale",
+                            "matched",
+                            "gaps"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "overall_score": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 100
+                        }
+                      },
+                      "required": [
+                        "summary",
+                        "dimensions",
+                        "strengths",
+                        "issues",
+                        "missing_information",
+                        "role_match",
+                        "overall_score"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "assessment"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/resume/optimize": {
+      "post": {
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "source": {
+                    "type": "string",
+                    "enum": [
+                      "editor"
+                    ]
+                  },
+                  "resume_text": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 40000
+                  },
+                  "target_role": {
+                    "type": "string",
+                    "maxLength": 200,
+                    "default": ""
+                  },
+                  "jd_text": {
+                    "type": "string",
+                    "maxLength": 12000,
+                    "default": ""
+                  },
+                  "fields": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 200
+                        },
+                        "label": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 300
+                        },
+                        "text": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 12000
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "label",
+                        "text"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "minItems": 1,
+                    "maxItems": 100
+                  }
+                },
+                "required": [
+                  "source",
+                  "resume_text",
+                  "fields"
+                ],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Reviewable resume changes; does not persist or overwrite the source",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
+                    },
+                    "optimization": {
+                      "type": "object",
+                      "properties": {
+                        "summary": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 4000
+                        },
+                        "missing_information": {
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 4000
+                          },
+                          "maxItems": 20
+                        },
+                        "changes": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "field_id": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 200
+                              },
+                              "label": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 300
+                              },
+                              "before": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 12000
+                              },
+                              "after": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 12000
+                              },
+                              "reason": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 4000
+                              }
+                            },
+                            "required": [
+                              "field_id",
+                              "label",
+                              "before",
+                              "after",
+                              "reason"
+                            ],
+                            "additionalProperties": false
+                          },
+                          "maxItems": 100
+                        }
+                      },
+                      "required": [
+                        "summary",
+                        "missing_information",
+                        "changes"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "optimization"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
     "/api/resume/status": {
       "get": {
         "responses": {

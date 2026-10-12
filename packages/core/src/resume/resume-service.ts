@@ -4,6 +4,8 @@ import { STRUCTURED_CHAT_OPTIONS } from '../provider/ports.ts'
 import { record, stringArray, StructuredOutputError } from '../kernel/structured-output.ts'
 import type { RequestContext } from '../kernel/context.ts'
 import type { ResumeDependencies, ResumeUseCases } from './ports.ts'
+import { evaluateResume, optimizeResume } from './advice.ts'
+import type { ResumeEvaluateInput, ResumeOptimizeInput } from './ports.ts'
 
 const MAX_RESUME_BYTES = 50 * 1024 * 1024
 const MAX_PARSE_CHARS = 20_000
@@ -65,6 +67,14 @@ function validateResume(value: unknown): Record<string, unknown> {
 
 export class ResumeService implements ResumeUseCases {
   constructor(private readonly deps: ResumeDependencies) {}
+
+  evaluate(context: RequestContext, input: ResumeEvaluateInput) {
+    return evaluateResume(this.deps, context, input)
+  }
+
+  optimize(context: RequestContext, input: ResumeOptimizeInput) {
+    return optimizeResume(this.deps, context, input)
+  }
 
   private userId(context: RequestContext): string {
     if (!context.userId) throw new AuthenticationError()
