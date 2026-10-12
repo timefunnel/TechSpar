@@ -11,6 +11,7 @@ COPY packages/providers/package.json packages/providers/package.json
 COPY packages/testing/package.json packages/testing/package.json
 COPY frontend/package.json frontend/package.json
 RUN bun install --frozen-lockfile --filter frontend
+COPY packages/contracts packages/contracts
 COPY frontend frontend
 RUN bun run --cwd frontend build
 
