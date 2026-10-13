@@ -850,8 +850,7 @@ export const useResumeStore = create(
 
 subscribeResumeAccount((userId) => {
   if (userId) {
-    void useResumeStore.persist.rehydrate();
-    return;
+    return useResumeStore.persist.rehydrate();
   }
   Object.keys(useResumeStore.getState().resumes).forEach(clearHistoryGroup);
   useResumeStore.setState({

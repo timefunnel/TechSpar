@@ -1,8 +1,8 @@
 import type { RequestContext } from '../kernel/context.ts'
 import type { TextGenerationUseCases } from '../provider/ports.ts'
-import type { ResumeAssessment, ResumeEvaluateInput, ResumeOptimizeInput, ResumeOptimization } from '@techspar/contracts'
+import type { ResumeAssessment, ResumeEditorSaveRequest, ResumeEditorState, ResumeEvaluateInput, ResumeOptimizeInput, ResumeOptimization } from '@techspar/contracts'
 
-export type { ResumeAssessment, ResumeEvaluateInput, ResumeOptimizeInput, ResumeOptimization } from '@techspar/contracts'
+export type { ResumeAssessment, ResumeEditorSaveRequest, ResumeEditorState, ResumeEvaluateInput, ResumeOptimizeInput, ResumeOptimization } from '@techspar/contracts'
 
 export type ResumeStatus = { has_resume: false } | { has_resume: true; filename: string; size: number }
 export type ResumeFile = { filename: string; bytes: Uint8Array }
@@ -12,6 +12,10 @@ export interface ResumeStore {
   read(userId: string): Promise<ResumeFile | undefined>
   replace(userId: string, filename: string, bytes: Uint8Array): Promise<void>
   delete(userId: string): Promise<boolean>
+  editorState(userId: string): Promise<ResumeEditorState>
+  replaceEditorState(userId: string, input: ResumeEditorSaveRequest): Promise<
+    { saved: true; state: ResumeEditorState } | { saved: false; current: ResumeEditorState }
+  >
 }
 
 export interface ResumeTextExtractor {
@@ -31,6 +35,8 @@ export interface ResumeUseCases {
   file(context: RequestContext): Promise<ResumeFile>
   upload(context: RequestContext, filename: string, bytes: Uint8Array): Promise<{ ok: true; filename: string; size: number }>
   delete(context: RequestContext): Promise<{ ok: true }>
+  editorState(context: RequestContext): Promise<ResumeEditorState>
+  saveEditorState(context: RequestContext, input: ResumeEditorSaveRequest): Promise<ResumeEditorState>
   text(context: RequestContext): Promise<string>
   parse(context: RequestContext): Promise<{ ok: true; parsed: Record<string, unknown> }>
   evaluate(context: RequestContext, input: ResumeEvaluateInput): Promise<{ ok: true; assessment: ResumeAssessment }>

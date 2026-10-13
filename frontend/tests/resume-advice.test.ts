@@ -1,19 +1,21 @@
 import { afterAll, beforeEach, expect, test } from 'bun:test';
 import type { ResumeOptimization } from '@techspar/contracts';
 import { buildEditorAdviceInput, adviceFingerprint, buildOptimizedCopy, saveOptimizedCopy } from '../src/resume/advice/editorAdvice';
-import { setResumeAccount } from '../src/resume/store/resumeAccount';
+import { flushResumePersistence, setResumeAccount } from '../src/resume/store/resumeAccount';
 import { useResumeStore } from '../src/resume/store/useResumeStore';
 import { blankResumeState } from '../src/resume/config/initialResumeData';
 import type { ResumeData } from '../src/resume/types/resume';
+import { FakeResumeServer } from './fake-resume-server';
 
 const originalStorage = Object.getOwnPropertyDescriptor(globalThis, 'localStorage');
 const values = new Map<string, string>();
-let failWrite = false;
 Object.defineProperty(globalThis, 'localStorage', { configurable: true, value: {
   getItem: (key: string) => values.get(key) ?? null,
-  setItem: (key: string, value: string) => { if (failWrite) throw new Error('Storage full'); values.set(key, value); },
+  setItem: (key: string, value: string) => { values.set(key, value); },
   removeItem: (key: string) => { values.delete(key); },
 } });
+const originalFetch = globalThis.fetch;
+let server: FakeResumeServer;
 function source(): ResumeData {
   return { ...structuredClone(blankResumeState), id: 'source-a', title: '原始简历', createdAt: '2026-01-01', updatedAt: '2026-01-01',
     basic: { ...structuredClone(blankResumeState.basic), name: '合成候选人', phone: '123', email: 'test@example.com' },
@@ -27,9 +29,13 @@ const optimization: ResumeOptimization = { summary: '突出行动', missing_info
   { field_id: 'experience:job-a', label: '工作经历', before: '负责接口开发', after: '开发并维护业务接口。', reason: '直接表达' },
   { field_id: 'projects:project-a', label: '项目', before: '开发异步消息', after: '- 通过消息机制实现异步处理\n- 维护消息处理链路', reason: '条目化' },
 ] };
-beforeEach(() => { failWrite = false; setResumeAccount(null); values.clear(); });
-afterAll(() => {
-  setResumeAccount(null);
+beforeEach(async () => {
+  await setResumeAccount(null).catch(() => undefined); values.clear();
+  server = new FakeResumeServer(); globalThis.fetch = server.fetch();
+});
+afterAll(async () => {
+  await setResumeAccount(null).catch(() => undefined);
+  globalThis.fetch = originalFetch;
   if (originalStorage) Object.defineProperty(globalThis, 'localStorage', originalStorage);
   else Reflect.deleteProperty(globalThis, 'localStorage');
 });
@@ -66,39 +72,39 @@ test('rejects missing selection, unknown fields, duplicates and outdated before 
   const changed = source(); changed.experience[0]!.details = '<p>新版职责</p>';
   expect(() => buildOptimizedCopy(changed, optimization, ['experience:job-a'])).toThrow('已变化');
 });
-test('saves a new version in the existing account storage and reloads both originals and copies', () => {
-  setResumeAccount('user-a'); const resume = source(); useResumeStore.getState().addResume(resume);
-  const id = saveOptimizedCopy('user-a', resume.id, adviceFingerprint(resume), optimization, ['experience:job-a']);
+test('saves a new version on the account server and reloads both originals and copies', async () => {
+  await setResumeAccount('user-a'); const resume = source(); useResumeStore.getState().addResume(resume);
+  await flushResumePersistence();
+  const id = await saveOptimizedCopy('user-a', resume.id, adviceFingerprint(resume), optimization, ['experience:job-a']);
   expect(useResumeStore.getState().resumes[resume.id]).toEqual(resume);
   expect(useResumeStore.getState().activeResumeId).toBe(id);
-  setResumeAccount(null); setResumeAccount('user-a');
+  await setResumeAccount(null); await setResumeAccount('user-a');
   expect(Object.keys(useResumeStore.getState().resumes)).toEqual([resume.id, id]);
   expect(useResumeStore.getState().resumes[id]!.experience[0]!.details).toContain('维护业务接口');
 });
-test('storage failure leaves in-memory state and the saved original unchanged', () => {
-  setResumeAccount('user-a'); const resume = source(); useResumeStore.getState().addResume(resume);
-  const state = useResumeStore.getState(); const saved = values.get('resume-storage:user-a'); failWrite = true;
-  expect(() => saveOptimizedCopy('user-a', resume.id, adviceFingerprint(resume), optimization, ['experience:job-a'])).toThrow('Storage full');
-  expect(useResumeStore.getState()).toBe(state); expect(values.get('resume-storage:user-a')).toBe(saved);
+test('server failure leaves in-memory state and the saved original unchanged', async () => {
+  await setResumeAccount('user-a'); const resume = source(); useResumeStore.getState().addResume(resume);
+  await flushResumePersistence(); const state = useResumeStore.getState(); const saved = server.state('user-a'); server.saveError = 'Server unavailable';
+  await expect(saveOptimizedCopy('user-a', resume.id, adviceFingerprint(resume), optimization, ['experience:job-a'])).rejects.toThrow('Server unavailable');
+  expect(useResumeStore.getState()).toBe(state); expect(server.state('user-a')).toEqual(saved);
 });
-test('does not overwrite newer saved data from another tab', () => {
-  setResumeAccount('user-a'); const resume = source(); useResumeStore.getState().addResume(resume);
-  const otherTab = JSON.parse(values.get('resume-storage:user-a')!);
-  otherTab.state.resumes[resume.id].title = '另一窗口中的新版';
-  const saved = JSON.stringify(otherTab); values.set('resume-storage:user-a', saved);
-  expect(() => saveOptimizedCopy('user-a', resume.id, adviceFingerprint(resume), optimization, ['experience:job-a'])).toThrow('其他窗口');
-  expect(values.get('resume-storage:user-a')).toBe(saved);
+test('does not overwrite newer saved data from another tab', async () => {
+  await setResumeAccount('user-a'); const resume = source(); useResumeStore.getState().addResume(resume);
+  await flushResumePersistence(); const otherTab = server.state('user-a');
+  (otherTab.resumes[resume.id] as ResumeData).title = '另一窗口中的新版'; otherTab.revision += 1; server.seed('user-a', otherTab);
+  await expect(saveOptimizedCopy('user-a', resume.id, adviceFingerprint(resume), optimization, ['experience:job-a'])).rejects.toThrow('其他窗口');
+  expect((server.state('user-a').resumes[resume.id] as ResumeData).title).toBe('另一窗口中的新版');
   expect(Object.keys(useResumeStore.getState().resumes)).toHaveLength(1);
 });
-test('account switches, source edits and deleting the source invalidate old optimization results', () => {
-  setResumeAccount('user-a'); const resume = source(); useResumeStore.getState().addResume(resume);
+test('account switches, source edits and deleting the source invalidate old optimization results', async () => {
+  await setResumeAccount('user-a'); const resume = source(); useResumeStore.getState().addResume(resume);
   const fingerprint = adviceFingerprint(resume);
-  setResumeAccount('user-b');
-  expect(() => saveOptimizedCopy('user-a', resume.id, fingerprint, optimization, ['experience:job-a'])).toThrow('账号');
-  setResumeAccount('user-a'); useResumeStore.getState().updateResume(resume.id, { skillContent: '<p>新增技能</p>' });
-  expect(() => saveOptimizedCopy('user-a', resume.id, fingerprint, optimization, ['experience:job-a'])).toThrow('已变化');
+  await setResumeAccount('user-b');
+  await expect(saveOptimizedCopy('user-a', resume.id, fingerprint, optimization, ['experience:job-a'])).rejects.toThrow('账号');
+  await setResumeAccount('user-a'); useResumeStore.getState().updateResume(resume.id, { skillContent: '<p>新增技能</p>' });
+  await expect(saveOptimizedCopy('user-a', resume.id, fingerprint, optimization, ['experience:job-a'])).rejects.toThrow('已变化');
   useResumeStore.getState().deleteResume(resume);
-  expect(() => saveOptimizedCopy('user-a', resume.id, fingerprint, optimization, ['experience:job-a'])).toThrow('已变化');
+  await expect(saveOptimizedCopy('user-a', resume.id, fingerprint, optimization, ['experience:job-a'])).rejects.toThrow('已变化');
 });
 test('rejects an empty draft instead of sending the generated document title as a resume', () => {
   const empty = { ...structuredClone(blankResumeState), id: 'empty' };

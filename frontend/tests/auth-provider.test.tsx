@@ -4,9 +4,10 @@ import { act, useContext, useEffect } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { AuthProvider } from "../src/contexts/AuthContext";
 import AuthContext, { type AuthContextValue } from "../src/contexts/AuthContextBase";
-import { getResumeAccount, setResumeAccount } from "../src/resume/store/resumeAccount";
+import { flushResumePersistence, getResumeAccount, setResumeAccount } from "../src/resume/store/resumeAccount";
 import { useResumeStore } from "../src/resume/store/useResumeStore";
 import { readSession, saveSession, SESSION_KEY, getAuthToken } from "../src/lib/authSession";
+import { FakeResumeServer } from "./fake-resume-server";
 
 const browser = new Window({ url: "http://localhost" });
 const values = new Map<string, string>();
@@ -27,6 +28,7 @@ for (const [key, value] of Object.entries({ window: browser, document: browser.d
 }
 const originalFetch = globalThis.fetch;
 let identityId = "user-a";
+let server: FakeResumeServer;
 let context: AuthContextValue;
 let root: Root | undefined;
 function Probe() {
@@ -49,14 +51,15 @@ function storageEvent(key: string | null) {
   Object.defineProperties(event, { key: { value: key }, storageArea: { value: storage } });
   browser.dispatchEvent(event);
 }
-beforeEach(() => {
-  setResumeAccount(null); values.clear(); failWrite = ""; identityId = "user-a";
-  globalThis.fetch = (async (url) => String(url).endsWith("/auth/me")
-    ? json({ id: identityId }) : json({ configured: { llm: true, embedding: true } })) as typeof fetch;
+beforeEach(async () => {
+  await setResumeAccount(null).catch(() => undefined); values.clear(); failWrite = ""; identityId = "user-a";
+  server = new FakeResumeServer();
+  globalThis.fetch = server.fetch(async (url) => String(url).endsWith("/auth/me")
+    ? json({ id: identityId }) : json({ configured: { llm: true, embedding: true } }));
 });
 afterEach(async () => {
   if (root) await act(async () => root!.unmount());
-  root = undefined; document.body.innerHTML = ""; setResumeAccount(null);
+  root = undefined; document.body.innerHTML = ""; await setResumeAccount(null).catch(() => undefined);
 });
 afterAll(() => {
   globalThis.fetch = originalFetch;
@@ -66,13 +69,13 @@ afterAll(() => {
   }
   void browser.happyDOM.close();
 });
-function seedPrivateResume() {
-  setResumeAccount("user-a"); useResumeStore.getState().createResume(null, true);
-  useResumeStore.getState().updateResumeTitle("A private resume"); setResumeAccount(null);
+async function seedPrivateResume() {
+  await setResumeAccount("user-a"); useResumeStore.getState().createResume(null, true);
+  useResumeStore.getState().updateResumeTitle("A private resume"); await flushResumePersistence(); await setResumeAccount(null);
 }
 
 test("rejects a legacy mixed session after reload even when B's token validates", async () => {
-  seedPrivateResume(); values.set("token", "token-b"); values.set("user", JSON.stringify(user("user-a")));
+  await seedPrivateResume(); values.set("token", "token-b"); values.set("user", JSON.stringify(user("user-a")));
   identityId = "user-b"; await mount();
   expect(context.user).toBeNull(); expect(getResumeAccount()).toBeNull();
   expect(useResumeStore.getState().resumes).toEqual({});
@@ -80,21 +83,21 @@ test("rejects a legacy mixed session after reload even when B's token validates"
 });
 
 test("quota failure during account switch leaves no mixed session in this tab or after reload", async () => {
-  seedPrivateResume(); saveSession("token-a", user("user-a")); await mount();
+  await seedPrivateResume(); saveSession("token-a", user("user-a")); await mount();
   expect(document.body.textContent).toContain("A private resume");
-  const snapshot = values.get("resume-storage:user-a"); failWrite = SESSION_KEY;
+  const snapshot = server.state("user-a"); failWrite = SESSION_KEY;
   await act(async () => {
     expect(() => context.login("token-b", { ...user("user-b"), name: "B".repeat(10000) })).toThrow("无法保存登录状态");
   });
   expect(readSession()).toBeNull(); expect(context.user).toBeNull(); expect(getResumeAccount()).toBeNull();
-  expect(useResumeStore.getState().resumes).toEqual({}); expect(values.get("resume-storage:user-a")).toBe(snapshot);
+  expect(useResumeStore.getState().resumes).toEqual({}); expect(server.state("user-a")).toEqual(snapshot);
   await act(async () => storageEvent(SESSION_KEY)); await settle(); expect(context.token).toBeNull();
   await act(async () => root!.unmount()); root = undefined; await mount();
   expect(document.body.textContent).not.toContain("A private resume");
 });
 
 test("valid legacy sessions hydrate only after server identity confirmation", async () => {
-  seedPrivateResume(); values.set("token", "token-a"); values.set("user", JSON.stringify(user("user-a")));
+  await seedPrivateResume(); values.set("token", "token-a"); values.set("user", JSON.stringify(user("user-a")));
   await mount(); expect(context.user?.id).toBe("user-a"); expect(getResumeAccount()).toBe("user-a");
   expect(document.body.textContent).toContain("A private resume");
 });
@@ -108,7 +111,7 @@ test("an atomic login replaces both fields and request consumers select the new 
 });
 
 test("cross-tab account changes and logout clear old resumes and verify the new identity", async () => {
-  seedPrivateResume(); saveSession("token-a", user("user-a")); await mount();
+  await seedPrivateResume(); saveSession("token-a", user("user-a")); await mount();
   identityId = "user-b"; saveSession("token-b", user("user-b"));
   await act(async () => storageEvent(SESSION_KEY)); await settle();
   expect(context.user?.id).toBe("user-b"); expect(useResumeStore.getState().resumes).toEqual({});
@@ -118,27 +121,27 @@ test("cross-tab account changes and logout clear old resumes and verify the new 
 
 test("delayed validation errors from A cannot clear a successful B login", async () => {
   saveSession("token-a", user("user-a")); let finishA!: (response: Response) => void;
-  globalThis.fetch = (async (url, options) => {
+  globalThis.fetch = server.fetch(async (url, options) => {
     if (!String(url).endsWith("/auth/me")) return json({ configured: { llm: true, embedding: true } });
     if ((options?.headers as Record<string, string>).Authorization === "Bearer token-a") {
       return new Promise<Response>((resolve) => { finishA = resolve; });
     }
     return json({ id: "user-b" });
-  }) as typeof fetch;
+  });
   await mount(); await act(async () => context.login("token-b", user("user-b"))); await settle();
   await act(async () => finishA(new Response("", { status: 401 }))); await settle();
   expect(context.user?.id).toBe("user-b"); expect(getResumeAccount()).toBe("user-b"); expect(getAuthToken()).toBe("token-b");
 });
 
 test("rejects mismatched identities in the new atomic session format", async () => {
-  seedPrivateResume(); saveSession("token-b", user("user-a")); identityId = "user-b"; await mount();
+  await seedPrivateResume(); saveSession("token-b", user("user-a")); identityId = "user-b"; await mount();
   expect(getResumeAccount()).toBeNull(); expect(readSession()).toBeNull(); expect(useResumeStore.getState().resumes).toEqual({});
 });
 
 test("switching accounts while settings JSON is pending cannot hydrate the old account", async () => {
-  seedPrivateResume(); saveSession("token-a", user("user-a"));
+  await seedPrivateResume(); saveSession("token-a", user("user-a"));
   let finishSettings!: (value: unknown) => void;
-  globalThis.fetch = (async (url, options) => {
+  globalThis.fetch = server.fetch(async (url, options) => {
     const a = (options?.headers as Record<string, string>).Authorization === "Bearer token-a";
     if (String(url).endsWith("/auth/me")) return json({ id: a ? "user-a" : "user-b" });
     if (a) {
@@ -147,7 +150,7 @@ test("switching accounts while settings JSON is pending cannot hydrate the old a
       return response;
     }
     return json({ configured: { llm: true, embedding: true } });
-  }) as typeof fetch;
+  });
   await mount();
   await act(async () => context.login("token-b", user("user-b"))); await settle();
   await act(async () => finishSettings({ configured: { llm: false, embedding: false } })); await settle();

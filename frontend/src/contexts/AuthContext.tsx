@@ -12,7 +12,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   function resetSession() {
     revision.current += 1;
-    setResumeAccount(null);
+    void setResumeAccount(null);
     setSession(readSession());
     setUser(null);
     setNeedsOnboarding(false);
@@ -26,7 +26,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   function login(token: string, userData: AuthUser) {
     revision.current += 1;
-    setResumeAccount(null);
+    void setResumeAccount(null);
     try {
       saveSession(token, userData);
     } catch {
@@ -61,7 +61,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (!isCurrent()) return;
         const configured = settings?.configured;
         setNeedsOnboarding(settingsRes.ok && !(configured?.llm && configured?.embedding));
-        setResumeAccount(identity.id);
+        // Identity is established before loading account-owned resumes. A
+        // resume sync error stays visible in the resume UI and must not turn
+        // into a false logout of an otherwise valid session.
+        await setResumeAccount(identity.id).catch(() => undefined);
+        if (!isCurrent()) return;
         setUser(session.user);
       })
       .catch(() => {
@@ -84,7 +88,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => {
       window.removeEventListener("storage", syncSession);
       revision.current += 1;
-      setResumeAccount(null);
+      void setResumeAccount(null);
     };
   }, []);
 

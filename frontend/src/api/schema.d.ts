@@ -1597,6 +1597,122 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/resume/editor-state": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Account-owned editable resume state */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            /** @enum {number} */
+                            schema_version: 1;
+                            resumes: {
+                                [key: string]: unknown;
+                            };
+                            active_resume_id: string | null;
+                            revision: number;
+                            updated_at: string;
+                        };
+                    };
+                };
+            };
+        };
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        /** @enum {number} */
+                        schema_version: 1;
+                        resumes: {
+                            [key: string]: unknown;
+                        };
+                        active_resume_id: string | null;
+                        expected_revision: number;
+                    };
+                };
+            };
+            responses: {
+                /** @description Saved editable resume state */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            /** @enum {number} */
+                            schema_version: 1;
+                            resumes: {
+                                [key: string]: unknown;
+                            };
+                            active_resume_id: string | null;
+                            revision: number;
+                            updated_at: string;
+                        };
+                    };
+                };
+                /** @description Editable resume revision conflict */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            detail: string;
+                            /** @enum {string} */
+                            code: "resume_editor_conflict";
+                            current: {
+                                /** @enum {number} */
+                                schema_version: 1;
+                                resumes: {
+                                    [key: string]: unknown;
+                                };
+                                active_resume_id: string | null;
+                                revision: number;
+                                updated_at: string;
+                            };
+                        };
+                    };
+                };
+                /** @description Validation Error */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["HTTPValidationError"];
+                    };
+                };
+            };
+        };
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/resume/file": {
         parameters: {
             query?: never;

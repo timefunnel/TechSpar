@@ -86,7 +86,7 @@ export async function authFetch(
   const res = await fetch(url, { ...options, headers });
   if (res.status === 401) {
     if (headers.Authorization === `Bearer ${getAuthToken()}`) {
-      setResumeAccount(null);
+      void setResumeAccount(null);
       clearSession();
       window.location.href = "/login";
     }

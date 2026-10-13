@@ -1,6 +1,6 @@
 import { mkdir, readdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
-import type { ResumeFile, ResumeStatus, ResumeStore } from '@techspar/core'
+import type { ResumeEditorSaveRequest, ResumeEditorState, ResumeFile, ResumeStatus, ResumeStore } from '@techspar/core'
 
 function safeSegment(value: string, label: string): string {
   if (!/^[A-Za-z0-9_-]+$/.test(value)) throw new Error(`Invalid ${label}`)
@@ -13,6 +13,8 @@ function safeFilename(value: string): string {
 }
 
 export class FileResumeStore implements ResumeStore {
+  private readonly editorQueues = new Map<string, Promise<unknown>>()
+
   constructor(private readonly dataDir: string) {}
 
   private directory(userId: string): string {
@@ -28,6 +30,63 @@ export class FileResumeStore implements ResumeStore {
       if ((error as { code?: string }).code === 'ENOENT') return undefined
       throw error
     }
+  }
+
+  private emptyEditorState(): ResumeEditorState {
+    return { schema_version: 1, revision: 0, resumes: {}, active_resume_id: null, updated_at: '' }
+  }
+
+  private editorStatePath(userId: string): string {
+    return join(this.directory(userId), 'editor-state.json')
+  }
+
+  private async withEditorLock<T>(userId: string, action: () => Promise<T>): Promise<T> {
+    const previous = this.editorQueues.get(userId) ?? Promise.resolve()
+    const current = previous.catch(() => undefined).then(action)
+    this.editorQueues.set(userId, current)
+    try { return await current }
+    finally { if (this.editorQueues.get(userId) === current) this.editorQueues.delete(userId) }
+  }
+
+  async editorState(userId: string): Promise<ResumeEditorState> {
+    try {
+      const parsed = JSON.parse(await readFile(this.editorStatePath(userId), 'utf8')) as ResumeEditorState
+      if (parsed?.schema_version !== 1 || !Number.isInteger(parsed.revision) || parsed.revision < 0 ||
+          !parsed.resumes || typeof parsed.resumes !== 'object' || Array.isArray(parsed.resumes) ||
+          !(parsed.active_resume_id === null || typeof parsed.active_resume_id === 'string') ||
+          typeof parsed.updated_at !== 'string') throw new Error('Invalid editable resume state')
+      return parsed
+    } catch (error) {
+      if ((error as { code?: string }).code === 'ENOENT') return this.emptyEditorState()
+      throw error
+    }
+  }
+
+  async replaceEditorState(userId: string, input: ResumeEditorSaveRequest): Promise<
+    { saved: true; state: ResumeEditorState } | { saved: false; current: ResumeEditorState }
+  > {
+    return this.withEditorLock(userId, async () => {
+      const current = await this.editorState(userId)
+      if (current.revision !== input.expected_revision) return { saved: false as const, current }
+      const state: ResumeEditorState = {
+        schema_version: 1,
+        revision: current.revision + 1,
+        resumes: input.resumes,
+        active_resume_id: input.active_resume_id,
+        updated_at: new Date().toISOString(),
+      }
+      const directory = this.directory(userId)
+      await mkdir(directory, { recursive: true })
+      const target = this.editorStatePath(userId)
+      const temporary = join(directory, `.${crypto.randomUUID()}.editor-state`)
+      try {
+        await writeFile(temporary, `${JSON.stringify(state, null, 2)}\n`, { flag: 'wx' })
+        await rename(temporary, target)
+      } finally {
+        await rm(temporary, { force: true }).catch(() => undefined)
+      }
+      return { saved: true as const, state }
+    })
   }
 
   async status(userId: string): Promise<ResumeStatus> {

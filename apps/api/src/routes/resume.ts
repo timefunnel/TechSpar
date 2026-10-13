@@ -8,6 +8,9 @@ import {
   ResumeUploadSchema,
   ResumeEvaluateRequestSchema,
   ResumeEvaluateResponseSchema,
+  ResumeEditorSaveRequestSchema,
+  ResumeEditorConflictSchema,
+  ResumeEditorStateSchema,
   ResumeOptimizeRequestSchema,
   ResumeOptimizeResponseSchema,
   TranscriptionSchema,
@@ -27,6 +30,12 @@ export function registerResumeRoutes(
 
   app.openapi(createRoute({ method: 'get', path: '/api/resume/status', responses: { 200: { content: { 'application/json': { schema: ResumeStatusSchema } }, description: 'Resume status' } } }),
     async (c) => c.json(await deps.resume.status(await authenticatedContext(c, deps.tokens))))
+
+  app.openapi(createRoute({ method: 'get', path: '/api/resume/editor-state', responses: { 200: { content: { 'application/json': { schema: ResumeEditorStateSchema } }, description: 'Account-owned editable resume state' } } }),
+    async (c) => c.json(await deps.resume.editorState(await authenticatedContext(c, deps.tokens))))
+
+  app.openapi(createRoute({ method: 'put', path: '/api/resume/editor-state', request: { body: { content: { 'application/json': { schema: ResumeEditorSaveRequestSchema } } } }, responses: { 200: { content: { 'application/json': { schema: ResumeEditorStateSchema } }, description: 'Saved editable resume state' }, 409: { content: { 'application/json': { schema: ResumeEditorConflictSchema } }, description: 'Editable resume revision conflict' } } }),
+    async (c) => c.json(await deps.resume.saveEditorState(await authenticatedContext(c, deps.tokens), c.req.valid('json')), 200))
 
   app.openapi(createRoute({ method: 'get', path: '/api/resume/file', responses: { 200: { content: { 'application/pdf': { schema: BinarySchema } }, description: 'Resume PDF' } } }),
     async (c) => {

@@ -108,10 +108,10 @@ export default function ResumeAdviceDialog({ resumeId, onParse }: { resumeId?: s
     }
   };
 
-  const apply = () => {
+  const apply = async () => {
     if (!resumeId || !snapshot || !optimization) return;
     try {
-      const id = saveOptimizedCopy(snapshot.account, resumeId, snapshot.fingerprint, optimization, selected);
+      const id = await saveOptimizedCopy(snapshot.account, resumeId, snapshot.fingerprint, optimization, selected);
       changeOpen(false); navigate(`/resume-manager/${id}`);
       toast.success('已保存为优化版，原稿完整保留');
     } catch (err) { setError(err instanceof Error ? err.message : String(err)); }
@@ -149,7 +149,7 @@ export default function ResumeAdviceDialog({ resumeId, onParse }: { resumeId?: s
               <div className="grid gap-3 sm:grid-cols-2"><div className="min-w-0 rounded bg-muted/40 p-3"><p className="mb-2 text-xs font-medium text-muted-foreground">修改前</p><p className="whitespace-pre-wrap break-words text-sm">{change.before}</p></div><div className="min-w-0 rounded border border-primary/20 bg-primary/5 p-3"><p className="mb-2 text-xs font-medium">修改后</p><p className="whitespace-pre-wrap break-words text-sm">{change.after}</p></div></div>
             </article>)}
             <p className="text-xs text-muted-foreground">请确认所选修改没有新增事实、技术或夸大个人贡献。只应用选中项，姓名、联系方式、时间和经历条目保持不变。</p>
-            <Button disabled={!selected.length || Boolean(busy) || stale} onClick={apply}>确认并另存优化版（{selected.length} 项）</Button>
+            <Button disabled={!selected.length || Boolean(busy) || stale} onClick={() => void apply()}>确认并另存优化版（{selected.length} 项）</Button>
           </>}
         </section>}
       </div>

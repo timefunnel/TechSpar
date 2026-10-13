@@ -5,9 +5,10 @@ import { createRoot, type Root } from 'react-dom/client';
 import { MemoryRouter } from 'react-router-dom';
 import evaluation from '../../tests-ts/contracts/fixtures/responses/resume-evaluated.json';
 import optimization from '../../tests-ts/contracts/fixtures/responses/resume-optimized.json';
-import { setResumeAccount } from '../src/resume/store/resumeAccount';
+import { flushResumePersistence, setResumeAccount } from '../src/resume/store/resumeAccount';
 import { useResumeStore } from '../src/resume/store/useResumeStore';
 import { blankResumeState } from '../src/resume/config/initialResumeData';
+import { FakeResumeServer } from './fake-resume-server';
 
 const browser = new Window({ url: 'http://localhost' });
 // Bun's VM-backed Window does not populate this JS intrinsic on Windows.
@@ -30,22 +31,25 @@ const { default: ResumeAdviceDialog } = await import('../src/resume/advice/Resum
 const originalFetch = globalThis.fetch;
 let root: Root | undefined;
 let calls: { url: string; input: Record<string, unknown> }[];
-beforeEach(() => {
-  setResumeAccount(null); values.clear(); calls = [];
-  setResumeAccount('user-a');
-  useResumeStore.getState().addResume({ ...structuredClone(blankResumeState), id: 'source-a', title: '合成原稿',
+let server: FakeResumeServer;
+beforeEach(async () => {
+  await setResumeAccount(null).catch(() => undefined); values.clear(); calls = [];
+  server = new FakeResumeServer();
+  globalThis.fetch = server.fetch(async (url, options) => {
+    calls.push({ url: String(url), input: JSON.parse(options?.body as string) });
+    return new Response(JSON.stringify(String(url).endsWith('/evaluate') ? evaluation : optimization), { headers: { 'Content-Type': 'application/json' } });
+  });
+  await setResumeAccount('user-a');
+  useResumeStore.getState().addResume({ ...structuredClone(blankResumeState), id: 'source-a', title: '合成原稿', createdAt: '2026-01-01', updatedAt: '2026-01-01',
     basic: { ...structuredClone(blankResumeState.basic), name: '合成候选人' },
     experience: [{ id: 'job-a', company: '示例公司', position: '后端', date: '时间待补', details: '<p>负责接口开发</p>', visible: true }],
     menuSections: ['basic', 'experience'].map((id, order) => ({ id, order, enabled: true, title: id, icon: '' })),
   });
-  globalThis.fetch = (async (url, options) => {
-    calls.push({ url: String(url), input: JSON.parse(options?.body as string) });
-    return new Response(JSON.stringify(String(url).endsWith('/evaluate') ? evaluation : optimization), { headers: { 'Content-Type': 'application/json' } });
-  }) as typeof fetch;
+  await flushResumePersistence();
 });
 afterEach(async () => {
   if (root) await act(async () => root!.unmount());
-  root = undefined; document.body.innerHTML = ''; setResumeAccount(null);
+  root = undefined; document.body.innerHTML = ''; await setResumeAccount(null).catch(() => undefined);
 });
 afterAll(() => {
   globalThis.fetch = originalFetch;
@@ -91,7 +95,7 @@ test('PDF assessment uses server-owned text and offers explicit parsing rather t
   await click('解析为模板简历，继续优化'); expect(parsed).toBe(1);
 });
 test('shows provider failure without fabricating a report or a saved copy', async () => {
-  globalThis.fetch = (async () => new Response(JSON.stringify({ detail: '模型服务连接失败' }), { status: 502 })) as typeof fetch;
+  globalThis.fetch = server.fetch(async () => new Response(JSON.stringify({ detail: '模型服务连接失败' }), { status: 502 }));
   await mount(); await click('生成优化建议');
   expect(document.querySelector('[role="alert"]')?.textContent).toBe('模型服务连接失败');
   expect(Object.keys(useResumeStore.getState().resumes)).toHaveLength(1);
@@ -103,7 +107,7 @@ test('rejects oversized input before making a model request and shows a readable
   expect(calls).toEqual([]); expect(document.querySelector('[role="alert"]')?.textContent).toContain('40000');
 });
 test('reports a non-JSON gateway failure explicitly rather than showing a raw parse exception', async () => {
-  globalThis.fetch = (async () => new Response('<html>Gateway timeout</html>', { status: 504 })) as typeof fetch;
+  globalThis.fetch = server.fetch(async () => new Response('<html>Gateway timeout</html>', { status: 504 }));
   await mount(); await click('评估简历');
   expect(document.querySelector('[role="alert"]')?.textContent).toContain('非 JSON 响应（HTTP 504）');
 });
@@ -116,9 +120,9 @@ test('disables applying results after the source changes', async () => {
 });
 test('account switch closes the dialog and rejects delayed results from the previous account', async () => {
   let finish!: (response: Response) => void;
-  globalThis.fetch = (async () => new Promise<Response>((resolve) => { finish = resolve; })) as typeof fetch;
+  globalThis.fetch = server.fetch(async () => new Promise<Response>((resolve) => { finish = resolve; }));
   await mount(); await click('生成优化建议');
-  await act(async () => { setResumeAccount('user-b'); });
+  await act(async () => { await setResumeAccount('user-b'); });
   expect(document.querySelector('[role="dialog"]')).toBeNull();
   await act(async () => finish(new Response(JSON.stringify(optimization)))); await settle();
   expect(document.body.textContent).not.toContain('修改后');

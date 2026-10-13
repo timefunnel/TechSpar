@@ -5,10 +5,12 @@ import { record, stringArray, StructuredOutputError } from '../kernel/structured
 import type { RequestContext } from '../kernel/context.ts'
 import type { ResumeDependencies, ResumeUseCases } from './ports.ts'
 import { evaluateResume, optimizeResume } from './advice.ts'
-import type { ResumeEvaluateInput, ResumeOptimizeInput } from './ports.ts'
+import type { ResumeEditorSaveRequest, ResumeEvaluateInput, ResumeOptimizeInput } from './ports.ts'
+import { ResumeEditorStateSchema } from '@techspar/contracts'
 
 const MAX_RESUME_BYTES = 50 * 1024 * 1024
 const MAX_PARSE_CHARS = 20_000
+const MAX_EDITOR_STATE_BYTES = 10 * 1024 * 1024
 
 const RESUME_PARSE_PROMPT = `请把下面这份简历的原文,解析成结构化 JSON。
 
@@ -83,6 +85,21 @@ export class ResumeService implements ResumeUseCases {
 
   status(context: RequestContext) {
     return this.deps.store.status(this.userId(context))
+  }
+
+  async editorState(context: RequestContext) {
+    return ResumeEditorStateSchema.parse(await this.deps.store.editorState(this.userId(context)))
+  }
+
+  async saveEditorState(context: RequestContext, input: ResumeEditorSaveRequest) {
+    if (new TextEncoder().encode(JSON.stringify(input.resumes)).length > MAX_EDITOR_STATE_BYTES) {
+      throw new AppError('模板简历数据过大（最多 10 MB）', 413, 'resume_editor_state_too_large')
+    }
+    const result = await this.deps.store.replaceEditorState(this.userId(context), input)
+    if (!result.saved) {
+      throw new AppError('模板简历已在其他窗口更新，请刷新后再试', 409, 'resume_editor_conflict', { current: result.current })
+    }
+    return result.state
   }
 
   async file(context: RequestContext) {

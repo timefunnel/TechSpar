@@ -70,6 +70,20 @@ describe('resume compatibility', () => {
     expect(await service.text(context)).toBe('完整简历原文\n第二行')
   })
 
+  test('persists editable resumes per account and rejects stale revisions', async () => {
+    const resume = {
+      id: 'resume-a', title: '供应链金融版', createdAt: '2026-10-12T00:00:00.000Z', updatedAt: '2026-10-12T00:00:00.000Z',
+      basic: {}, menuSections: [], globalSettings: {}, education: [], experience: [], projects: [],
+    }
+    expect(await service.editorState(context)).toEqual({ schema_version: 1, revision: 0, resumes: {}, active_resume_id: null, updated_at: '' })
+    const saved = await service.saveEditorState(context, { schema_version: 1, expected_revision: 0, resumes: { [resume.id]: resume }, active_resume_id: resume.id })
+    expect(saved).toMatchObject({ schema_version: 1, revision: 1, resumes: { [resume.id]: resume }, active_resume_id: resume.id })
+    expect(await service.editorState(context)).toEqual(saved)
+    expect(await service.editorState({ ...context, userId: 'user-b' })).toEqual({ schema_version: 1, revision: 0, resumes: {}, active_resume_id: null, updated_at: '' })
+    await expect(service.saveEditorState(context, { schema_version: 1, expected_revision: 0, resumes: {}, active_resume_id: null })).rejects.toMatchObject({ status: 409, code: 'resume_editor_conflict' })
+    expect((await service.editorState(context)).resumes).toHaveProperty(resume.id)
+  })
+
   test('retries JSON parsing once and returns a structured object', async () => {
     await service.upload(context, 'resume.pdf', pdf)
     responses.push('not json', '```json\n{"basic":{"name":"张三"}}\n```')

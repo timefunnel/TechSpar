@@ -41,14 +41,15 @@ export default function LegacyResumeRecovery() {
           <div className="flex justify-end gap-2">
             <Button variant="outline" onClick={() => setAccount(null)}>暂不恢复</Button>
             <Button disabled={!confirmed} onClick={() => {
+              void (async () => {
               try {
-                const count = recoverLegacyResumes(account!, confirmed);
+                const count = await recoverLegacyResumes(account!, confirmed);
                 setAvailable(hasLegacyResumes()); setAccount(null);
                 setNotice(`已恢复 ${count} 份旧简历，可继续编辑和导出。`);
               } catch (cause) {
-                setError(cause instanceof Error && cause.name !== "QuotaExceededError"
-                  ? cause.message : "保存失败，请释放浏览器存储空间后重试。旧简历已保留。");
+                setError(cause instanceof Error ? cause.message : "保存到服务器失败，旧简历已保留。");
               }
+              })();
             }}>确认归属并恢复</Button>
           </div>
         </DialogContent>

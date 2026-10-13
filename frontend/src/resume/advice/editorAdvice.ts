@@ -2,7 +2,7 @@ import type { ResumeOptimization, ResumeOptimizeInput } from '@techspar/contract
 import type { ResumeData } from '../types/resume';
 import { generateResumeMarkdown, markdownFromText } from '../utils/markdown';
 import { generateUUID } from '../utils/uuid';
-import { getResumeAccount } from '../store/resumeAccount';
+import { commitResumeSnapshot, flushResumePersistence, getResumeAccount, getServerResume } from '../store/resumeAccount';
 import { useResumeStore } from '../store/useResumeStore';
 
 type EditableField = { id: string; label: string; text: string; apply: (resume: ResumeData, html: string) => void };
@@ -84,26 +84,22 @@ export function buildOptimizedCopy(source: ResumeData, optimization: ResumeOptim
   return copy;
 }
 
-export function saveOptimizedCopy(account: string, sourceId: string, fingerprint: string, optimization: ResumeOptimization, selected: readonly string[]): string {
+export async function saveOptimizedCopy(account: string, sourceId: string, fingerprint: string, optimization: ResumeOptimization, selected: readonly string[]): Promise<string> {
   if (getResumeAccount() !== account) throw new Error('登录账号已变化，请重新生成优化建议');
   const state = useResumeStore.getState();
   const source = state.resumes[sourceId];
   if (!source || state.activeResumeId !== sourceId || adviceFingerprint(source) !== fingerprint) throw new Error('简历内容已变化，请重新生成优化建议');
-  const copy = buildOptimizedCopy(source, optimization, selected);
-  const resumes = { ...state.resumes, [copy.id]: copy };
-  const storageKey = `resume-storage:${encodeURIComponent(account)}`;
-  const saved = localStorage.getItem(storageKey);
-  if (!saved) throw new Error('无法确认已保存的原稿，请先备份简历并刷新页面');
-  let persisted;
-  try { persisted = JSON.parse(saved); }
-  catch { throw new Error('已保存的简历数据损坏，请先备份浏览器数据'); }
-  if (JSON.stringify(persisted?.state?.resumes) !== JSON.stringify(state.resumes)) {
-    throw new Error('其他窗口中的简历已变化，请刷新后重新生成；未覆盖已保存的数据');
-  }
-  // Use the existing account-scoped storage, but require a successful write
-  // before changing editor state or claiming that a new version was saved.
-  localStorage.setItem(storageKey, JSON.stringify({ state: { resumes, activeResumeId: copy.id }, version: 0 }));
+  await flushResumePersistence();
+  if (getResumeAccount() !== account) throw new Error('登录账号已变化，请重新生成优化建议');
+  const currentState = useResumeStore.getState();
+  const currentSource = currentState.resumes[sourceId];
+  if (!currentSource || currentState.activeResumeId !== sourceId || adviceFingerprint(currentSource) !== fingerprint) throw new Error('简历内容已变化，请重新生成优化建议');
+  const savedSource = getServerResume(sourceId) as ResumeData | undefined;
+  if (!savedSource || adviceFingerprint(savedSource) !== fingerprint) throw new Error('服务器上的简历版本已变化，请刷新后重新生成优化建议');
+  const copy = buildOptimizedCopy(currentSource, optimization, selected);
+  const resumes = { ...currentState.resumes, [copy.id]: copy };
+  await commitResumeSnapshot(resumes, copy.id);
   useResumeStore.setState({ resumes, activeResumeId: copy.id, activeResume: copy,
-    history: { ...state.history, [copy.id]: [] }, future: { ...state.future, [copy.id]: [] } });
+    history: { ...currentState.history, [copy.id]: [] }, future: { ...currentState.future, [copy.id]: [] } });
   return copy.id;
 }

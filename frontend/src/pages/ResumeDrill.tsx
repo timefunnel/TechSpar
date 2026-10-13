@@ -150,10 +150,10 @@ function ResumeDrillContent() {
       const source = buildResumeDrillSource(current);
       const account = getResumeAccount();
       const identity = getAuthToken();
-      assertResumeDrillSource(account, source, resumeId);
+      await assertResumeDrillSource(account, source, resumeId);
       const value = await previewResumeDrill(source, signal);
       if (signal.aborted || identity !== getAuthToken()) return;
-      assertResumeDrillSource(account, source, resumeId);
+      await assertResumeDrillSource(account, source, resumeId);
       display(value);
     });
   const confirm = () =>
@@ -162,11 +162,11 @@ function ResumeDrillContent() {
       const source = buildResumeDrillSource(current);
       const account = getResumeAccount();
       const identity = getAuthToken();
-      assertResumeDrillSource(account, plan.source, resumeId);
+      await assertResumeDrillSource(account, plan.source, resumeId);
       const value = await confirmResumeDrill(plan, source, selected, signal);
       if (signal.aborted || identity !== getAuthToken()) return;
       display(value);
-      assertResumeDrillSource(account, source, resumeId);
+      await assertResumeDrillSource(account, source, resumeId);
     });
   const start = (pointId: string) =>
     run(async (signal) => {

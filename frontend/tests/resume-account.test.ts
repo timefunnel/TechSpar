@@ -1,26 +1,33 @@
 import { afterAll, beforeEach, describe, expect, test } from "bun:test";
-import { accountResumeStorage, setResumeAccount } from "../src/resume/store/resumeAccount";
+import { blankResumeState } from "../src/resume/config/initialResumeData";
+import {
+  flushResumePersistence,
+  getResumePersistenceStatus,
+  setResumeAccount,
+} from "../src/resume/store/resumeAccount";
+import { FakeResumeServer } from "./fake-resume-server";
 
 const values = new Map<string, string>();
 const originalStorage = Object.getOwnPropertyDescriptor(globalThis, "localStorage");
-const storage = {
+const originalFetch = globalThis.fetch;
+Object.defineProperty(globalThis, "localStorage", { configurable: true, value: {
   getItem: (key: string) => values.get(key) ?? null,
   setItem: (key: string, value: string) => { values.set(key, value); },
   removeItem: (key: string) => { values.delete(key); },
-};
-Object.defineProperty(globalThis, "localStorage", { configurable: true, value: storage });
-
-values.set("resume-storage", JSON.stringify({ state: { resumes: { legacy: { title: "Private legacy resume" } }, activeResumeId: "legacy" }, version: 0 }));
+} });
 const { useResumeStore } = await import("../src/resume/store/useResumeStore");
-const initialState = useResumeStore.getState();
+let server: FakeResumeServer;
 
-beforeEach(() => {
-  setResumeAccount(null);
+beforeEach(async () => {
+  await setResumeAccount(null).catch(() => undefined);
   values.clear();
+  server = new FakeResumeServer();
+  globalThis.fetch = server.fetch();
 });
 
-afterAll(() => {
-  setResumeAccount(null);
+afterAll(async () => {
+  await setResumeAccount(null).catch(() => undefined);
+  globalThis.fetch = originalFetch;
   if (originalStorage) Object.defineProperty(globalThis, "localStorage", originalStorage);
   else Reflect.deleteProperty(globalThis, "localStorage");
 });
@@ -31,104 +38,66 @@ function createResume(title: string): string {
   return id;
 }
 
-describe("resume account isolation", () => {
-  test("never hydrates shared storage before authentication", () => {
-    expect(initialState.resumes).toEqual({});
-    expect(initialState.activeResumeId).toBeNull();
-    expect(initialState.activeResume).toBeNull();
-  });
-
-  test("switches accounts without exposing resumes or overwriting either account", () => {
-    setResumeAccount("user-a");
+describe("server-owned resume persistence", () => {
+  test("loads and saves isolated state for each authenticated account", async () => {
+    await setResumeAccount("user-a");
     const aId = createResume("A private resume");
-    const aSnapshot = values.get("resume-storage:user-a");
+    await flushResumePersistence();
 
-    setResumeAccount("user-b");
+    await setResumeAccount("user-b");
     expect(useResumeStore.getState().resumes).toEqual({});
-    expect(useResumeStore.getState().activeResume).toBeNull();
-    expect(values.get("resume-storage:user-a")).toBe(aSnapshot);
     const bId = createResume("B private resume");
-    const bSnapshot = values.get("resume-storage:user-b");
+    await flushResumePersistence();
 
-    setResumeAccount("user-a");
+    await setResumeAccount("user-a");
     expect(Object.keys(useResumeStore.getState().resumes)).toEqual([aId]);
-    expect(useResumeStore.getState().activeResumeId).toBe(aId);
     expect(useResumeStore.getState().activeResume?.title).toBe("A private resume");
-    expect(values.get("resume-storage:user-b")).toBe(bSnapshot);
-
-    setResumeAccount("user-b");
-    expect(Object.keys(useResumeStore.getState().resumes)).toEqual([bId]);
-    expect(useResumeStore.getState().activeResume?.title).toBe("B private resume");
+    expect(Object.keys(server.state("user-b").resumes)).toEqual([bId]);
   });
 
-  test("logout clears the active resume and undo/redo while preserving saved data", () => {
-    setResumeAccount("user-a");
-    const id = createResume("Private resume");
-    useResumeStore.getState().undo();
-    expect(useResumeStore.getState().future[id]?.length).toBeGreaterThan(0);
-    const snapshot = values.get("resume-storage:user-a");
+  test("migrates an account-scoped browser snapshot only after the server confirms it", async () => {
+    const resume = { ...structuredClone(blankResumeState), id: "legacy-a", title: "Browser resume", createdAt: "2026-01-01", updatedAt: "2026-01-02" };
+    const key = "resume-storage:user-a";
+    values.set(key, JSON.stringify({ state: { resumes: { [resume.id]: resume }, activeResumeId: resume.id }, version: 0 }));
 
-    setResumeAccount(null);
-    const state = useResumeStore.getState();
-    expect(state.resumes).toEqual({});
-    expect(state.activeResumeId).toBeNull();
-    expect(state.activeResume).toBeNull();
-    expect(state.history).toEqual({});
-    expect(state.future).toEqual({});
-    expect(values.get("resume-storage:user-a")).toBe(snapshot);
-
-    setResumeAccount("user-a");
-    expect(Object.keys(useResumeStore.getState().resumes)).toEqual([id]);
-    expect(useResumeStore.getState().history).toEqual({});
-    expect(useResumeStore.getState().future).toEqual({});
+    await setResumeAccount("user-a");
+    expect(useResumeStore.getState().resumes[resume.id]?.title).toBe("Browser resume");
+    expect(server.state("user-a").resumes).toHaveProperty(resume.id);
+    expect(values.has(key)).toBeFalse();
   });
 
-  test("anonymous changes are not persisted or transferred to the next account", () => {
-    createResume("Anonymous content");
-    expect(values.size).toBe(0);
-    setResumeAccount("user-a");
+  test("keeps the browser snapshot when migration cannot be saved", async () => {
+    const resume = { ...structuredClone(blankResumeState), id: "legacy-a", title: "Browser resume", createdAt: "2026-01-01", updatedAt: "2026-01-02" };
+    const key = "resume-storage:user-a";
+    values.set(key, JSON.stringify({ state: { resumes: { [resume.id]: resume }, activeResumeId: resume.id }, version: 0 }));
+    server.saveError = "server unavailable";
+
+    await expect(setResumeAccount("user-a")).rejects.toThrow("server unavailable");
+    expect(values.has(key)).toBeTrue();
     expect(useResumeStore.getState().resumes).toEqual({});
   });
 
-  test("leaves legacy data untouched and never assigns it to an arbitrary account", () => {
-    const legacy = JSON.stringify({ state: { resumes: { legacy: { title: "Private legacy resume" } }, activeResumeId: "legacy" }, version: 0 });
-    values.set("resume-storage", legacy);
-    for (const userId of ["user-a", "user-b"]) {
-      setResumeAccount(userId);
-      expect(useResumeStore.getState().resumes).toEqual({});
-    }
-    expect(values.get("resume-storage")).toBe(legacy);
+  test("reports revision conflicts and never overwrites the newer server state", async () => {
+    await setResumeAccount("user-a");
+    const id = createResume("First version");
+    await flushResumePersistence();
+    const newer = server.state("user-a");
+    (newer.resumes[id] as { title: string }).title = "Other tab version";
+    newer.revision += 1;
+    server.seed("user-a", newer);
+
+    useResumeStore.getState().updateResumeTitle("Stale local version");
+    await expect(flushResumePersistence()).rejects.toThrow("其他窗口");
+    expect((server.state("user-a").resumes[id] as { title: string }).title).toBe("Other tab version");
+    expect(getResumePersistenceStatus()).toMatchObject({ phase: "error" });
   });
 
-  test("selecting the same account does not discard unsaved undo history", () => {
-    setResumeAccount("user-a");
-    const id = createResume("Private resume");
-    const history = useResumeStore.getState().history;
-    setResumeAccount("user-a");
-    expect(useResumeStore.getState().activeResumeId).toBe(id);
-    expect(useResumeStore.getState().history).toBe(history);
-  });
-
-  test("a corrupt account snapshot cannot leave the previous account in memory", () => {
-    setResumeAccount("user-a");
-    createResume("A private resume");
-    values.set("resume-storage:user-b", "invalid JSON");
-    setResumeAccount("user-b");
+  test("logout clears in-memory resumes without deleting server data", async () => {
+    await setResumeAccount("user-a");
+    const id = createResume("Kept on server");
+    await flushResumePersistence();
+    await setResumeAccount(null);
     expect(useResumeStore.getState().resumes).toEqual({});
-    expect(useResumeStore.getState().activeResume).toBeNull();
-  });
-
-  test("clearStorage removes only the current account snapshot", () => {
-    setResumeAccount("user-a");
-    createResume("A private resume");
-    const aSnapshot = values.get("resume-storage:user-a");
-    setResumeAccount("user-b");
-    createResume("B private resume");
-    useResumeStore.persist.clearStorage();
-    expect(values.has("resume-storage:user-b")).toBeFalse();
-    expect(values.get("resume-storage:user-a")).toBe(aSnapshot);
-    setResumeAccount(null);
-    accountResumeStorage.removeItem("resume-storage");
-    expect(values.get("resume-storage:user-a")).toBe(aSnapshot);
+    expect(server.state("user-a").resumes).toHaveProperty(id);
   });
 });

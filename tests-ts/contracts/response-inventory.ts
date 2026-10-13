@@ -45,6 +45,8 @@ export const responseInventory: readonly ResponseInventoryEntry[] = [
   { operation: 'PUT /api/knowledge/{topic}/high_freq', routeFile: 'apps/api/src/routes/knowledge.ts', status: 200, contentType: 'application/json', transport: 'json', fixture: 'ok.json', dynamic: false },
   { operation: 'GET /api/graph/{topic}', routeFile: 'apps/api/src/routes/knowledge.ts', status: 200, contentType: 'application/json', transport: 'json', fixture: 'question-graph.json', dynamic: true },
   { operation: 'GET /api/resume/status', routeFile: 'apps/api/src/routes/resume.ts', status: 200, contentType: 'application/json', transport: 'json', fixture: 'resume-status-empty.json', dynamic: false },
+  { operation: 'GET /api/resume/editor-state', routeFile: 'apps/api/src/routes/resume.ts', status: 200, contentType: 'application/json', transport: 'json', fixture: 'resume-editor-state.json', dynamic: false, responseSchema: 'ResumeEditorStateSchema' },
+  { operation: 'PUT /api/resume/editor-state', routeFile: 'apps/api/src/routes/resume.ts', status: 200, contentType: 'application/json', transport: 'json', fixture: 'resume-editor-state.json', dynamic: false, responseSchema: 'ResumeEditorStateSchema' },
   { operation: 'GET /api/resume/file', routeFile: 'apps/api/src/routes/resume.ts', status: 200, contentType: 'application/pdf', transport: 'binary', dynamic: false },
   { operation: 'DELETE /api/resume', routeFile: 'apps/api/src/routes/resume.ts', status: 200, contentType: 'application/json', transport: 'json', fixture: 'ok.json', dynamic: false },
   { operation: 'POST /api/resume/parse', routeFile: 'apps/api/src/routes/resume.ts', status: 200, contentType: 'application/json', transport: 'json', fixture: 'resume-parsed.json', dynamic: true },

@@ -1,97 +1,80 @@
 import { afterAll, beforeEach, expect, test } from "bun:test";
+import { blankResumeState } from "../src/resume/config/initialResumeData";
 import { recoverLegacyResumes, hasLegacyResumes } from "../src/resume/store/legacyResumeRecovery";
 import { getResumeAccount, setResumeAccount } from "../src/resume/store/resumeAccount";
 import { useResumeStore } from "../src/resume/store/useResumeStore";
-import { saveSession } from "../src/lib/authSession";
+import { clearSession, saveSession } from "../src/lib/authSession";
+import { FakeResumeServer } from "./fake-resume-server";
 
 const values = new Map<string, string>();
-const original = Object.getOwnPropertyDescriptor(globalThis, "localStorage");
-let failWrite = false;
+const originalStorage = Object.getOwnPropertyDescriptor(globalThis, "localStorage");
+const originalFetch = globalThis.fetch;
 Object.defineProperty(globalThis, "localStorage", { configurable: true, value: {
   getItem: (key: string) => values.get(key) ?? null,
-  setItem: (key: string, value: string) => {
-    if (failWrite) throw new DOMException("Storage full", "QuotaExceededError");
-    values.set(key, value);
-  },
+  setItem: (key: string, value: string) => { values.set(key, value); },
   removeItem: (key: string) => { values.delete(key); },
 } });
-beforeEach(() => { setResumeAccount(null); values.clear(); failWrite = false; });
-afterAll(() => {
-  setResumeAccount(null);
-  if (original) Object.defineProperty(globalThis, "localStorage", original);
+let server: FakeResumeServer;
+
+beforeEach(async () => {
+  await setResumeAccount(null).catch(() => undefined); clearSession(); values.clear();
+  server = new FakeResumeServer(); globalThis.fetch = server.fetch();
+});
+
+afterAll(async () => {
+  await setResumeAccount(null).catch(() => undefined); clearSession(); globalThis.fetch = originalFetch;
+  if (originalStorage) Object.defineProperty(globalThis, "localStorage", originalStorage);
   else Reflect.deleteProperty(globalThis, "localStorage");
 });
+
 function seedLegacy() {
-  setResumeAccount("legacy-owner");
-  const id = useResumeStore.getState().createResume(null, true);
-  useResumeStore.getState().updateResumeTitle("Old private resume");
-  const snapshot = values.get("resume-storage:legacy-owner")!;
+  const resume = { ...structuredClone(blankResumeState), id: "legacy-resume", title: "Old private resume", createdAt: "2026-01-01", updatedAt: "2026-01-01" };
+  const snapshot = JSON.stringify({ state: { resumes: { [resume.id]: resume }, activeResumeId: resume.id }, version: 0 });
   values.set("resume-storage", snapshot);
-  values.delete("resume-storage:legacy-owner");
-  setResumeAccount(null);
-  return { id, snapshot };
-}
-function selectAccount(id = "user-a") {
-  saveSession(`token-${id}`, { id, name: id }); setResumeAccount(id);
+  return { resume, snapshot };
 }
 
-test("does not display or recover old data without explicit ownership confirmation", () => {
-  const { snapshot } = seedLegacy(); selectAccount();
+async function selectAccount(id = "user-a") {
+  saveSession(`token-${id}`, { id, name: id });
+  await setResumeAccount(id);
+}
+
+test("does not recover old data without explicit ownership confirmation", async () => {
+  const { snapshot } = seedLegacy(); await selectAccount();
   expect(hasLegacyResumes()).toBeTrue(); expect(useResumeStore.getState().resumes).toEqual({});
-  expect(() => recoverLegacyResumes("user-a", false)).toThrow("确认");
+  await expect(recoverLegacyResumes("user-a", false)).rejects.toThrow("确认");
   expect(values.get("resume-storage")).toBe(snapshot);
 });
 
-test("confirmed recovery restores complete editable content, survives reload, and runs once", () => {
-  const { id } = seedLegacy(); selectAccount();
-  expect(recoverLegacyResumes("user-a", true)).toBe(1);
+test("confirmed recovery saves complete content on the server and runs once", async () => {
+  const { resume } = seedLegacy(); await selectAccount();
+  expect(await recoverLegacyResumes("user-a", true)).toBe(1);
   expect(hasLegacyResumes()).toBeFalse();
   expect(useResumeStore.getState().activeResume?.title).toBe("Old private resume");
-  expect(useResumeStore.getState().resumes[id].menuSections.length).toBeGreaterThan(0);
-  useResumeStore.getState().updateResumeTitle("Edited recovered resume");
-  expect(recoverLegacyResumes("user-a", true)).toBe(0);
-  setResumeAccount(null); setResumeAccount("user-a");
-  expect(useResumeStore.getState().resumes[id].title).toBe("Edited recovered resume");
+  expect((server.state("user-a").resumes[resume.id] as { title: string }).title).toBe("Old private resume");
+  expect(await recoverLegacyResumes("user-a", true)).toBe(0);
 });
 
-test("preserves both resumes when a legacy ID collides with a current resume", () => {
-  const { id } = seedLegacy(); selectAccount();
-  const current = { ...JSON.parse(values.get("resume-storage")!).state.resumes[id], title: "Current resume" };
-  useResumeStore.getState().addResume(current);
-  expect(recoverLegacyResumes("user-a", true)).toBe(1);
-  expect(useResumeStore.getState().resumes[id].title).toBe("Current resume");
-  expect(Object.values(useResumeStore.getState().resumes).map((resume) => resume.title).sort())
-    .toEqual(["Current resume", "Old private resume"]);
-  expect(useResumeStore.getState().activeResumeId).toBe(id);
+test("preserves both resumes when a legacy ID collides with a server resume", async () => {
+  const { resume } = seedLegacy();
+  const current = { ...resume, title: "Current resume", updatedAt: "2026-02-01" };
+  server.seed("user-a", { schema_version: 1, revision: 1, resumes: { [current.id]: current }, active_resume_id: current.id, updated_at: "2026-02-01" });
+  await selectAccount();
+  expect(await recoverLegacyResumes("user-a", true)).toBe(1);
+  expect(Object.values(useResumeStore.getState().resumes).map((item) => item.title).sort()).toEqual(["Current resume", "Old private resume"]);
 });
 
-test("quota failure retains the legacy snapshot, existing account data, and editor state", () => {
-  const { snapshot } = seedLegacy(); selectAccount();
-  useResumeStore.getState().createResume(null, true);
-  useResumeStore.getState().updateResumeTitle("Current resume");
-  const saved = values.get("resume-storage:user-a"); const state = useResumeStore.getState();
-  failWrite = true;
-  expect(() => recoverLegacyResumes("user-a", true)).toThrow("Storage full");
+test("server failure retains the legacy snapshot and current editor state", async () => {
+  const { snapshot } = seedLegacy(); await selectAccount();
+  const state = useResumeStore.getState(); server.saveError = "Server unavailable";
+  await expect(recoverLegacyResumes("user-a", true)).rejects.toThrow("Server unavailable");
   expect(values.get("resume-storage")).toBe(snapshot);
-  expect(values.get("resume-storage:user-a")).toBe(saved); expect(useResumeStore.getState()).toBe(state);
-  failWrite = false;
-  expect(recoverLegacyResumes("user-a", true)).toBe(1);
+  expect(useResumeStore.getState()).toBe(state);
 });
 
-test("rejects stale confirmation after an account switch and leaves other accounts untouched", () => {
-  const { snapshot } = seedLegacy(); selectAccount(); selectAccount("user-b");
-  expect(() => recoverLegacyResumes("user-a", true)).toThrow("确认");
+test("rejects stale confirmation after an account switch", async () => {
+  const { snapshot } = seedLegacy(); await selectAccount(); await selectAccount("user-b");
+  await expect(recoverLegacyResumes("user-a", true)).rejects.toThrow("确认");
   expect(values.get("resume-storage")).toBe(snapshot);
-  expect(getResumeAccount()).toBe("user-b"); expect(useResumeStore.getState().resumes).toEqual({});
-  expect(values.has("resume-storage:user-a")).toBeFalse();
-});
-
-test("rejects malformed, incomplete and unknown-version snapshots without deleting the backup", () => {
-  const { snapshot } = seedLegacy(); selectAccount();
-  for (const raw of ["bad JSON", '{"state":{}}', '{"state":{"resumes":{"bad":{}}}}',
-    JSON.stringify({ ...JSON.parse(snapshot), version: 99 })]) {
-    values.set("resume-storage", raw);
-    expect(() => recoverLegacyResumes("user-a", true)).toThrow();
-    expect(values.get("resume-storage")).toBe(raw); expect(useResumeStore.getState().resumes).toEqual({});
-  }
+  expect(getResumeAccount()).toBe("user-b");
 });

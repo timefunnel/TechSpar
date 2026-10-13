@@ -7,13 +7,14 @@ import AuthContext, {
   type AuthContextValue,
 } from "../src/contexts/AuthContextBase";
 import { saveSession } from "../src/lib/authSession";
-import { setResumeAccount } from "../src/resume/store/resumeAccount";
+import { flushResumePersistence, setResumeAccount } from "../src/resume/store/resumeAccount";
 import { useResumeStore } from "../src/resume/store/useResumeStore";
 import { blankResumeState } from "../src/resume/config/initialResumeData";
 import type {
   ResumeDrillPlanResponse,
   ResumeDrillSourceInput,
 } from "@techspar/contracts";
+import { FakeResumeServer } from "./fake-resume-server";
 
 const browser = new Window({ url: "http://localhost" });
 Object.defineProperty(browser, "SyntaxError", {
@@ -49,6 +50,7 @@ let calls: Array<{ path: string; body: Record<string, unknown> }> = [];
 let plan: ResumeDrillPlanResponse | undefined;
 let previewError = false;
 let release: (() => void) | undefined;
+let server: FakeResumeServer;
 const user: AuthContextValue = {
   token: "test-a",
   user: { id: "user-a" },
@@ -63,6 +65,8 @@ function resume(id = "supply", project = "合成合同项目") {
     ...structuredClone(blankResumeState),
     id,
     title: id === "supply" ? "合成供应链版" : "合成通用版",
+    createdAt: "2026-01-01",
+    updatedAt: "2026-01-01",
     projects: [
       {
         id: "project",
@@ -100,16 +104,8 @@ async function mount() {
   previewError = false;
   release = undefined;
   localStorage.clear();
-  saveSession("test-a", { id: "user-a" });
-  setResumeAccount("user-a");
-  const first = resume();
-  const second = resume("backend", "合成数据平台");
-  useResumeStore.setState({
-    resumes: { supply: first, backend: second },
-    activeResumeId: "supply",
-    activeResume: first,
-  });
-  globalThis.fetch = (async (input, init) => {
+  server = new FakeResumeServer();
+  globalThis.fetch = server.fetch(async (input, init) => {
     const path = String(input);
     const body = init?.body ? JSON.parse(String(init.body)) : {};
     calls.push({ path, body });
@@ -163,7 +159,17 @@ async function mount() {
         },
       });
     throw new Error("unexpected request " + path);
-  }) as typeof fetch;
+  });
+  saveSession("test-a", { id: "user-a" });
+  await setResumeAccount("user-a");
+  const first = resume();
+  const second = resume("backend", "合成数据平台");
+  useResumeStore.setState({
+    resumes: { supply: first, backend: second },
+    activeResumeId: "supply",
+    activeResume: first,
+  });
+  await flushResumePersistence();
   const host = document.createElement("div");
   document.body.append(host);
   root = createRoot(host);
@@ -185,7 +191,7 @@ afterEach(async () => {
   release = undefined;
   if (root) await act(async () => root!.unmount());
   root = undefined;
-  setResumeAccount(null);
+  await setResumeAccount(null).catch(() => undefined);
   document.body.innerHTML = "";
   globalThis.fetch = originalFetch;
 });
@@ -284,7 +290,7 @@ test("an account switch unmounts the previous preview and ignores its delayed re
   const resolve = release!;
   await act(async () => {
     saveSession("test-b", { id: "user-b" });
-    setResumeAccount("user-b");
+    await setResumeAccount("user-b");
     render({ ...user, token: "test-b", user: { id: "user-b" } });
   });
   await act(async () => {

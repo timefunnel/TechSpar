@@ -1,4 +1,4 @@
-import { getResumeAccount } from "./resumeAccount";
+import { commitResumeSnapshot, getResumeAccount } from "./resumeAccount";
 import { useResumeStore } from "./useResumeStore";
 import { readSession } from "../../lib/authSession";
 import { generateUUID } from "../utils/uuid";
@@ -17,7 +17,7 @@ function record(value: unknown): value is Record<string, unknown> {
 }
 
 // No legacy content is read into the editor until ownership is confirmed.
-export function recoverLegacyResumes(account: string, ownershipConfirmed: boolean): number {
+export async function recoverLegacyResumes(account: string, ownershipConfirmed: boolean): Promise<number> {
   if (!ownershipConfirmed || getResumeAccount() !== account || readSession()?.user.id !== account) {
     throw new Error("请确认这些旧简历属于当前登录账号");
   }
@@ -50,11 +50,9 @@ export function recoverLegacyResumes(account: string, ownershipConfirmed: boolea
     recoveredId ??= id;
   }
   const activeResumeId = useResumeStore.getState().activeResumeId ?? recoveredId;
-  // Persist the complete merged snapshot first. Do not use the forgiving
-  // editor adapter here: recovery must report quota failure and keep the source.
-  localStorage.setItem(`${LEGACY_KEY}:${encodeURIComponent(account)}`, JSON.stringify({
-    state: { resumes, activeResumeId }, version: 0,
-  }));
+  // The server must confirm the complete merge before the unowned legacy copy
+  // is removed or the editor claims recovery succeeded.
+  await commitResumeSnapshot(resumes, activeResumeId);
   localStorage.removeItem(LEGACY_KEY);
   useResumeStore.setState({ resumes, activeResumeId,
     activeResume: activeResumeId ? resumes[activeResumeId] : null });

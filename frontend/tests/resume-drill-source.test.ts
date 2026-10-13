@@ -1,18 +1,21 @@
-import { afterAll, afterEach, expect, test } from "bun:test";
+import { afterAll, afterEach, beforeEach, expect, test } from "bun:test";
 import {
   buildResumeDrillSource,
   assertResumeDrillSource,
 } from "../src/resume/advice/drillSource";
 import { blankResumeState } from "../src/resume/config/initialResumeData";
-import { setResumeAccount } from "../src/resume/store/resumeAccount";
+import { flushResumePersistence, setResumeAccount } from "../src/resume/store/resumeAccount";
 import { useResumeStore } from "../src/resume/store/useResumeStore";
 import type { ResumeData } from "../src/resume/types/resume";
+import { FakeResumeServer } from "./fake-resume-server";
 
 const originalStorage = Object.getOwnPropertyDescriptor(
   globalThis,
   "localStorage",
 );
 const values = new Map<string, string>();
+const originalFetch = globalThis.fetch;
+let server: FakeResumeServer;
 Object.defineProperty(globalThis, "localStorage", {
   configurable: true,
   value: {
@@ -26,9 +29,14 @@ Object.defineProperty(globalThis, "localStorage", {
   },
 });
 afterAll(() => {
+  globalThis.fetch = originalFetch;
   if (originalStorage)
     Object.defineProperty(globalThis, "localStorage", originalStorage);
   else Reflect.deleteProperty(globalThis, "localStorage");
+});
+beforeEach(async () => {
+  await setResumeAccount(null).catch(() => undefined);
+  values.clear(); server = new FakeResumeServer(); globalThis.fetch = server.fetch();
 });
 
 function sample(
@@ -40,6 +48,8 @@ function sample(
     ...structuredClone(blankResumeState),
     id,
     title,
+    createdAt: "2026-01-01",
+    updatedAt: "2026-01-01",
     basic: {
       ...structuredClone(blankResumeState.basic),
       name: "不应发送的姓名",
@@ -67,8 +77,8 @@ function sample(
     })),
   };
 }
-afterEach(() => {
-  setResumeAccount(null);
+afterEach(async () => {
+  await setResumeAccount(null).catch(() => undefined);
   values.clear();
 });
 
@@ -98,54 +108,33 @@ test("uses only the selected version and existing visible-section serialization,
   expect(first.text).not.toContain("<p>");
 });
 
-test("does not confirm stale same-account data edited in another window or a corrupt saved snapshot", () => {
-  setResumeAccount("user-a");
+test("does not confirm stale same-account data edited in another window", async () => {
+  await setResumeAccount("user-a");
   const resume = sample();
   const source = buildResumeDrillSource(resume);
   useResumeStore.setState({ resumes: { [resume.id]: resume } });
-  const key = "resume-storage:user-a";
-  values.set(
-    key,
-    JSON.stringify({
-      state: {
-        resumes: { [resume.id]: { ...resume, title: "另一窗口的修改" } },
-      },
-    }),
-  );
-  expect(() => assertResumeDrillSource("user-a", source, resume.id)).toThrow(
-    "其他窗口",
-  );
-  values.set(key, "{broken");
-  expect(() => assertResumeDrillSource("user-a", source, resume.id)).toThrow(
-    "损坏",
-  );
+  await flushResumePersistence();
+  const other = server.state("user-a"); other.revision += 1;
+  (other.resumes[resume.id] as ResumeData).title = "另一窗口的修改"; server.seed("user-a", other);
+  await expect(assertResumeDrillSource("user-a", source, resume.id)).rejects.toThrow("其他窗口");
 });
 
-test("rejects changed versions, edited text, deleted sources and account switches before confirming", () => {
-  setResumeAccount("user-a");
+test("rejects changed versions, edited text, deleted sources and account switches before confirming", async () => {
+  await setResumeAccount("user-a");
   const resume = sample();
   const source = buildResumeDrillSource(resume);
   useResumeStore.setState({ resumes: { [resume.id]: resume } });
-  expect(() =>
-    assertResumeDrillSource("user-a", source, resume.id),
-  ).not.toThrow();
-  expect(() => assertResumeDrillSource("user-a", source, "backend")).toThrow(
-    "版本",
-  );
+  await flushResumePersistence();
+  await expect(assertResumeDrillSource("user-a", source, resume.id)).resolves.toBeUndefined();
+  await expect(assertResumeDrillSource("user-a", source, "backend")).rejects.toThrow("版本");
   useResumeStore.setState({
     resumes: { [resume.id]: { ...resume, title: "改名" } },
   });
-  expect(() => assertResumeDrillSource("user-a", source, resume.id)).toThrow(
-    "内容",
-  );
+  await expect(assertResumeDrillSource("user-a", source, resume.id)).rejects.toThrow("内容");
   useResumeStore.setState({ resumes: {} });
-  expect(() => assertResumeDrillSource("user-a", source, resume.id)).toThrow(
-    "版本",
-  );
-  setResumeAccount("user-b");
-  expect(() => assertResumeDrillSource("user-a", source, resume.id)).toThrow(
-    "账号",
-  );
+  await expect(assertResumeDrillSource("user-a", source, resume.id)).rejects.toThrow("版本");
+  await setResumeAccount("user-b");
+  await expect(assertResumeDrillSource("user-a", source, resume.id)).rejects.toThrow("账号");
 });
 
 test("reports empty, overlong and hidden editor content explicitly", () => {

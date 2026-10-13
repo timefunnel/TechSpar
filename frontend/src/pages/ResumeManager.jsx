@@ -13,6 +13,7 @@ import ThemeModal from "@/resume/shared/ThemeModal";
 import { generateUUID } from "@/resume/utils/uuid";
 import PdfResumeSection from "./resumeManager/PdfResumeSection";
 import LegacyResumeRecovery from "./resumeManager/LegacyResumeRecovery";
+import ResumePersistenceStatus from "@/resume/shared/ResumePersistenceStatus";
 import "@/resume/styles/resume.css";
 import "@/resume/styles/fonts";
 
@@ -181,12 +182,13 @@ export default function ResumeManager() {
 
       <PdfResumeSection />
       <LegacyResumeRecovery />
+      <div className="mb-4"><ResumePersistenceStatus /></div>
 
       <div className="mb-4 flex flex-wrap items-end justify-between gap-4">
         <div className="flex items-center gap-2">
           <h2 className="text-lg font-semibold text-text">模板简历</h2>
           <span className="text-xs text-dim">
-            多套模板、可编辑、支持导出 PDF;数据保存在本地浏览器
+            多套模板、可编辑、支持导出 PDF；数据按登录账号保存在服务器
           </span>
         </div>
         <div className="flex items-center gap-2">

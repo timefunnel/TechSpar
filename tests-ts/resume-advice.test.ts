@@ -28,7 +28,9 @@ describe('resume assessment and optimization', () => {
     deps = {
       store: { async status() { return { has_resume: true, filename: 'resume.pdf', size: 10 } },
         async read(userId) { reads.push(userId); return { filename: 'resume.pdf', bytes: new Uint8Array([1]) } },
-        async replace() { throw new Error('unexpected write') }, async delete() { throw new Error('unexpected delete') } },
+        async replace() { throw new Error('unexpected write') }, async delete() { throw new Error('unexpected delete') },
+        async editorState() { return { schema_version: 1, revision: 0, resumes: {}, active_resume_id: null, updated_at: '' } },
+        async replaceEditorState() { throw new Error('unexpected editor write') } },
       extractor: { async extract() { return '仅属于当前账号的简历文本' } },
       ai: { async complete(ctx, messages) { calls.push({ user: ctx.userId, messages }); return response }, async *stream() {} },
       index: { async invalidate() { throw new Error('unexpected index mutation') } },
