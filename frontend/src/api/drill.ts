@@ -4,6 +4,14 @@ import {
   DrillQueueSchema,
   DrillSessionSchema,
   DrillStartSchema,
+  ResumeDrillSourceSchema,
+  ResumeDrillPlanSchema,
+  ResumeDrillPlansSchema,
+  ResumeDrillConfirmSchema,
+  ResumeDrillStartSchema,
+  type ResumeDrillSourceInput,
+  type ResumeDrillPlanResponse,
+  type ResumeDrillStartInput,
   type DrillSessionResponse,
   type DrillQueueResponse,
   type DrillActionRequest,
@@ -15,6 +23,7 @@ export type DrillSession = DrillSessionResponse;
 export type DrillQueue = DrillQueueResponse;
 export type DrillAction = DrillActionRequest;
 export type DrillStart = DrillStartRequest;
+export type ResumeDrillPlan = ResumeDrillPlanResponse;
 
 async function request<T>(
   path: string,
@@ -65,6 +74,21 @@ export function getDrillQueue(topic?: string, signal?: AbortSignal) {
     undefined,
     signal,
   );
+}
+export function getResumeDrillPlans(signal?: AbortSignal) {
+  return request('/resume/plans', ResumeDrillPlansSchema, undefined, signal);
+}
+export function getResumeDrillPlan(id: string, signal?: AbortSignal) {
+  return request('/resume/plan/' + encodeURIComponent(id), ResumeDrillPlanSchema, undefined, signal);
+}
+export function previewResumeDrill(source: ResumeDrillSourceInput, signal?: AbortSignal) {
+  return request('/resume/preview', ResumeDrillPlanSchema, ResumeDrillSourceSchema.parse(source), signal);
+}
+export function confirmResumeDrill(plan: ResumeDrillPlan, source: ResumeDrillSourceInput, selected: string[], signal?: AbortSignal) {
+  return request('/resume/plan/' + encodeURIComponent(plan.plan_id) + '/confirm', ResumeDrillPlanSchema, ResumeDrillConfirmSchema.parse({ revision: plan.revision, source, selected }), signal);
+}
+export function startResumeDrill(input: ResumeDrillStartInput, signal?: AbortSignal) {
+  return request('/resume/start', DrillSessionSchema, ResumeDrillStartSchema.parse(input), signal);
 }
 export function startDrill(input: DrillStart, signal?: AbortSignal) {
   return request(

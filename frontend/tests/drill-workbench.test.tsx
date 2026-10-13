@@ -202,3 +202,16 @@ test("failed submissions keep the typed answer; pending and ended states cannot 
   expect(document.querySelector("textarea")).toBeNull();
   expect(document.body.textContent).not.toContain("给我提示");
 });
+
+test('shows source provenance and expression-only scoring without exposing reference answers during recall', async () => {
+  const s = sample();
+  s.state.questions[0]!.resume_context = { plan_id: 'plan', source_id: 'resume', source_title: '合成通用版', point_id: '1', project: '合成兑付项目', evidence: '简历中可核对的原文依据', pending_facts: ['项目时间待补'], stage: 'expression' };
+  s.state.progress['1']!.attempt = { id: 'expr', answer: '项目表达回答', at: '2026-10-13T00:00:00Z', reason: null, assistance: 'independent', outcome: 'independent_correct', feedback };
+  await mount(s, async () => true);
+  expect(document.body.textContent).toContain('合成通用版 · 合成兑付项目');
+  expect(document.body.textContent).toContain('项目表达 · 独立答对');
+  expect(document.body.textContent).toContain('不影响技术掌握度');
+  await click('隐藏答案并复述');
+  expect(document.body.textContent).not.toContain('需要隐藏的核心答案');
+  expect(document.body.textContent).toContain('原文依据与待确认信息');
+});

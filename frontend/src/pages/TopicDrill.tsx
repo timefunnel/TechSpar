@@ -142,10 +142,15 @@ function TopicDrillContent() {
             恢复知识、回顾错题，再用无提示的场景题验证掌握。
           </p>
         </div>
-        <Button variant="outline" onClick={() => navigate("/knowledge")}>
-          <BookOpen size={16} />
-          管理训练领域
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button onClick={() => navigate("/topic-drill/resume")}>
+            简历定制题库
+          </Button>
+          <Button variant="outline" onClick={() => navigate("/knowledge")}>
+            <BookOpen size={16} />
+            管理训练领域
+          </Button>
+        </div>
       </header>
       <div
         className="flex shrink-0 flex-wrap gap-2"
@@ -302,6 +307,11 @@ function TopicDrillContent() {
                           : "尚未建立计划"}
                       </span>
                     </div>
+                    {item.resume_context && (
+                      <p className="mt-2 text-xs text-dim">
+                        简历：{item.resume_context.source_title} · {item.resume_context.project} · {item.resume_context.stage === "expression" ? "表达复习，不影响技术掌握度" : "技术复习"}
+                      </p>
+                    )}
                     {item.question && (
                       <p className="mt-2 text-sm">原题：{item.question}</p>
                     )}

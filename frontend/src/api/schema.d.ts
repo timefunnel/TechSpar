@@ -2595,6 +2595,416 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/drill/resume/plans": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Latest 20 account-owned resume outlines */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            /** @enum {number} */
+                            version: 1;
+                            revision: number;
+                            plan_id: string;
+                            source: {
+                                id: string;
+                                title: string;
+                                text: string;
+                            };
+                            points: {
+                                id: string;
+                                topic: string;
+                                point: string;
+                                project: string;
+                                evidence: string;
+                                pending_facts: string[];
+                            }[];
+                            selected: string[];
+                            confirmed: boolean;
+                            warnings: string[];
+                        }[];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/drill/resume/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        id: string;
+                        title: string;
+                        text: string;
+                    };
+                };
+            };
+            responses: {
+                /** @description Source-bound resume learning outline */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            /** @enum {number} */
+                            version: 1;
+                            revision: number;
+                            plan_id: string;
+                            source: {
+                                id: string;
+                                title: string;
+                                text: string;
+                            };
+                            points: {
+                                id: string;
+                                topic: string;
+                                point: string;
+                                project: string;
+                                evidence: string;
+                                pending_facts: string[];
+                            }[];
+                            selected: string[];
+                            confirmed: boolean;
+                            warnings: string[];
+                        };
+                    };
+                };
+                /** @description Validation Error */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["HTTPValidationError"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/drill/resume/plan/{session_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    session_id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Source-bound resume learning outline */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            /** @enum {number} */
+                            version: 1;
+                            revision: number;
+                            plan_id: string;
+                            source: {
+                                id: string;
+                                title: string;
+                                text: string;
+                            };
+                            points: {
+                                id: string;
+                                topic: string;
+                                point: string;
+                                project: string;
+                                evidence: string;
+                                pending_facts: string[];
+                            }[];
+                            selected: string[];
+                            confirmed: boolean;
+                            warnings: string[];
+                        };
+                    };
+                };
+                /** @description Validation Error */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["HTTPValidationError"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/drill/resume/plan/{session_id}/confirm": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    session_id: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        revision: number;
+                        source: {
+                            id: string;
+                            title: string;
+                            text: string;
+                        };
+                        selected: string[];
+                    };
+                };
+            };
+            responses: {
+                /** @description Source-bound resume learning outline */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            /** @enum {number} */
+                            version: 1;
+                            revision: number;
+                            plan_id: string;
+                            source: {
+                                id: string;
+                                title: string;
+                                text: string;
+                            };
+                            points: {
+                                id: string;
+                                topic: string;
+                                point: string;
+                                project: string;
+                                evidence: string;
+                                pending_facts: string[];
+                            }[];
+                            selected: string[];
+                            confirmed: boolean;
+                            warnings: string[];
+                        };
+                    };
+                };
+                /** @description Validation Error */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["HTTPValidationError"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/drill/resume/start": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        plan_id: string;
+                        point_id: string;
+                        /** @enum {string} */
+                        stage: "foundation" | "application" | "expression";
+                    };
+                };
+            };
+            responses: {
+                /** @description Server-owned guided learning state */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            session_id: string;
+                            topic: string;
+                            /** @enum {string} */
+                            status: "ongoing" | "reviewed";
+                            state: {
+                                /** @enum {number} */
+                                version: 1;
+                                revision: number;
+                                /** @enum {string} */
+                                source: "new" | "due" | "mistakes";
+                                questions: {
+                                    id: string;
+                                    question: string;
+                                    focus_area: string;
+                                    difficulty: number;
+                                    /** @enum {string} */
+                                    kind: "judgment" | "choice" | "code" | "scenario";
+                                    options: string[];
+                                    review_point: string;
+                                    primed: boolean;
+                                    resume_context?: {
+                                        plan_id: string;
+                                        source_id: string;
+                                        source_title: string;
+                                        point_id: string;
+                                        project: string;
+                                        evidence: string;
+                                        pending_facts: string[];
+                                        /** @enum {string} */
+                                        stage: "foundation" | "application" | "expression";
+                                    };
+                                }[];
+                                progress: {
+                                    [key: string]: {
+                                        exposure_at?: string;
+                                        hints: string[];
+                                        explanation?: {
+                                            short_answer: string;
+                                            detailed_answer: string;
+                                        };
+                                        attempt?: {
+                                            id: string;
+                                            answer: string;
+                                            /** @enum {string|null} */
+                                            reason: "forgot" | "unclear" | "expression" | null;
+                                            at: string;
+                                            /** @enum {string} */
+                                            assistance: "independent" | "hinted" | "explained" | "after_feedback";
+                                            /** @enum {string} */
+                                            outcome: "independent_correct" | "assisted_correct" | "needs_review";
+                                            feedback: {
+                                                score: number;
+                                                correct_points: string[];
+                                                missing_points: string[];
+                                                misconceptions: string[];
+                                                short_answer: string;
+                                                detailed_answer: string;
+                                            };
+                                        };
+                                        recall?: {
+                                            id: string;
+                                            answer: string;
+                                            /** @enum {string|null} */
+                                            reason: "forgot" | "unclear" | "expression" | null;
+                                            at: string;
+                                            /** @enum {string} */
+                                            assistance: "independent" | "hinted" | "explained" | "after_feedback";
+                                            /** @enum {string} */
+                                            outcome: "independent_correct" | "assisted_correct" | "needs_review";
+                                            feedback: {
+                                                score: number;
+                                                correct_points: string[];
+                                                missing_points: string[];
+                                                misconceptions: string[];
+                                                short_answer: string;
+                                                detailed_answer: string;
+                                            };
+                                        };
+                                    };
+                                };
+                            };
+                        };
+                    };
+                };
+                /** @description Validation Error */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["HTTPValidationError"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/drill/queue": {
         parameters: {
             query?: never;
@@ -2622,6 +3032,8 @@ export interface paths {
                         "application/json": {
                             today: string;
                             items: {
+                                /** @enum {string} */
+                                axis?: "performance";
                                 point: string;
                                 topic: string;
                                 question: string | null;
@@ -2634,6 +3046,17 @@ export interface paths {
                                 improved: boolean;
                                 /** @enum {string} */
                                 evidence: "historical_unknown" | "independent_correct" | "assisted_correct" | "needs_review" | "weak_point";
+                                resume_context?: {
+                                    plan_id: string;
+                                    source_id: string;
+                                    source_title: string;
+                                    point_id: string;
+                                    project: string;
+                                    evidence: string;
+                                    pending_facts: string[];
+                                    /** @enum {string} */
+                                    stage: "foundation" | "application" | "expression";
+                                };
                             }[];
                             active_sessions: {
                                 session_id: string;
@@ -2720,6 +3143,17 @@ export interface paths {
                                     options: string[];
                                     review_point: string;
                                     primed: boolean;
+                                    resume_context?: {
+                                        plan_id: string;
+                                        source_id: string;
+                                        source_title: string;
+                                        point_id: string;
+                                        project: string;
+                                        evidence: string;
+                                        pending_facts: string[];
+                                        /** @enum {string} */
+                                        stage: "foundation" | "application" | "expression";
+                                    };
                                 }[];
                                 progress: {
                                     [key: string]: {
@@ -2835,6 +3269,17 @@ export interface paths {
                                     options: string[];
                                     review_point: string;
                                     primed: boolean;
+                                    resume_context?: {
+                                        plan_id: string;
+                                        source_id: string;
+                                        source_title: string;
+                                        point_id: string;
+                                        project: string;
+                                        evidence: string;
+                                        pending_facts: string[];
+                                        /** @enum {string} */
+                                        stage: "foundation" | "application" | "expression";
+                                    };
                                 }[];
                                 progress: {
                                     [key: string]: {
@@ -2966,6 +3411,17 @@ export interface paths {
                                     options: string[];
                                     review_point: string;
                                     primed: boolean;
+                                    resume_context?: {
+                                        plan_id: string;
+                                        source_id: string;
+                                        source_title: string;
+                                        point_id: string;
+                                        project: string;
+                                        evidence: string;
+                                        pending_facts: string[];
+                                        /** @enum {string} */
+                                        stage: "foundation" | "application" | "expression";
+                                    };
                                 }[];
                                 progress: {
                                     [key: string]: {
@@ -3089,6 +3545,17 @@ export interface paths {
                                     options: string[];
                                     review_point: string;
                                     primed: boolean;
+                                    resume_context?: {
+                                        plan_id: string;
+                                        source_id: string;
+                                        source_title: string;
+                                        point_id: string;
+                                        project: string;
+                                        evidence: string;
+                                        pending_facts: string[];
+                                        /** @enum {string} */
+                                        stage: "foundation" | "application" | "expression";
+                                    };
                                 }[];
                                 progress: {
                                     [key: string]: {

@@ -131,7 +131,7 @@ export function DrillWorkbench({
             </button>
           ))}
         </nav>
-        <Card className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+        <Card className="flex min-h-0 min-w-0 flex-1 flex-col md:overflow-hidden">
           <div className="flex items-center justify-between gap-2 border-b border-border px-5 py-3">
             <span className="font-semibold">{question.focus_area}</span>
             <span className="text-xs text-dim">
@@ -140,6 +140,14 @@ export function DrillWorkbench({
             </span>
           </div>
           <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-5">
+            {question.resume_context && <section aria-label="简历出题依据" className="rounded-lg border border-border bg-secondary/30 p-3 text-sm">
+              <p className="font-medium">{question.resume_context.source_title} · {question.resume_context.project}</p>
+              <p className="mt-1 text-xs text-dim">{question.resume_context.stage === 'expression' ? '项目表达单独评分，不影响技术掌握度。' : '技术练习；项目应用题的新增约束是假设，不代表简历中的实际实现。'}</p>
+              <details className="mt-2"><summary className="cursor-pointer text-primary">原文依据与待确认信息</summary>
+                <blockquote className="mt-2 whitespace-pre-wrap break-words text-dim">{question.resume_context.evidence}</blockquote>
+                {question.resume_context.pending_facts.map((text, i) => <p className="mt-1 text-dim" key={i}>待确认：{text}</p>)}
+              </details>
+            </section>}
             <div className="md-content text-sm">
               <ReactMarkdown>{question.question}</ReactMarkdown>
             </div>
@@ -223,6 +231,7 @@ export function DrillWorkbench({
               <section aria-label="即时反馈" className="space-y-3 text-sm">
                 <div className="flex flex-wrap items-center gap-2">
                   <strong>
+                    {question.resume_context?.stage === 'expression' ? '项目表达 · ' : '技术练习 · '}
                     {outcomes[progress.attempt.outcome]} ·{" "}
                     {progress.attempt.feedback.score}/10
                   </strong>
@@ -295,7 +304,7 @@ export function DrillWorkbench({
                   </div>
                 )}
                 <p className="text-xs text-dim">
-                  练习分不是掌握度。看过提示、讲解、反馈或同日变式后答对，都不作为延迟独立掌握证据。
+                  练习分不是掌握度。项目表达不影响技术掌握度；看过提示、讲解、反馈或同日变式后答对，都不作为延迟独立掌握证据。
                 </p>
               </section>
             )}
@@ -341,7 +350,7 @@ export function DrillWorkbench({
               </div>
             )}
           </div>
-          <div className="flex shrink-0 flex-wrap items-center gap-2 border-t border-border px-4 py-3">
+          <div className="sticky bottom-0 z-10 flex shrink-0 flex-wrap items-center gap-2 border-t border-border bg-card px-4 py-3 md:static">
             {!progress.attempt && !finished && (
               <>
                 <Button

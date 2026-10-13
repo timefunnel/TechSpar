@@ -5,7 +5,7 @@ import { join } from 'node:path'
 import { DrillLearningService, ProfileService, type ChatCompleteOptions, type ChatMessage, type DrillSessionView, type ProfileDependencies, type RequestContext, type TextGenerationUseCases } from '@techspar/core'
 import { BunInterviewSessionRepository } from '@techspar/db'
 import { FileCandidateProfileRepository } from '@techspar/platform'
-import { DrillSessionSchema } from '@techspar/contracts'
+import { DrillSessionSchema, ResumeDrillPlanSchema } from '@techspar/contracts'
 import { boundaryApp, jsonHeaders } from './contracts/test-app.ts'
 
 const context: RequestContext = { userId: 'user-a', requestId: 'test', signal: new AbortController().signal }
@@ -240,7 +240,162 @@ describe('drill HTTP boundary', () => {
     const start = await app.request('/api/drill/start', { method: 'POST', headers: jsonHeaders, body: JSON.stringify({ topic: 'java', source: 'new' }) })
     expect(start.status).toBe(200); expect(DrillSessionSchema.safeParse(await start.json()).success).toBeTrue()
     const spec = await (await app.request('/openapi.json')).json()
-    expect(Object.keys(spec.paths).filter(path => path.startsWith('/api/drill/'))).toHaveLength(5)
+    expect(Object.keys(spec.paths).filter(path => path.startsWith('/api/drill/'))).toHaveLength(10)
     expect((await app.request('/api/drill/session/learning-1/action', { method: 'POST', headers: jsonHeaders, body: JSON.stringify({ revision: 0, question_id: '1', action: 'answer' }) })).status).toBe(422)
+  })
+})
+
+const resumeSource = { id: 'resume-supply', title: '合成供应链版', text: '## 合成融资项目\n时间：待补\n负责合同状态机与合同编号幂等控制，通过 RabbitMQ 事件同步合同状态，解决重复回调与重复消费问题。效率提升约30%，统计口径待确认。' }
+const outline = (override: Record<string, unknown> = {}) => JSON.stringify({ points: [{ topic: 'java', point: '消息幂等', project: '合成融资项目', evidence: '负责合同状态机与合同编号幂等控制，通过 RabbitMQ 事件同步合同状态，解决重复回调与重复消费问题。', pending_facts: ['项目时间待补', '效率提升的基线、样本与统计口径待确认'], ...override }] })
+async function confirmedPlan(f: Awaited<ReturnType<typeof fixture>>) {
+  const plan = await f.service.previewResume(context, resumeSource)
+  return f.service.confirmResume(context, plan.plan_id, { revision: 0, source: resumeSource, selected: ['1'] })
+}
+
+describe('resume-driven outline and the existing learning pipeline', () => {
+  test('persists an account-owned preview with exact source quotes and missing facts, without inventing another source', async () => {
+    const f = await fixture([outline()])
+    const plan = await f.service.previewResume(context, resumeSource)
+    expect(ResumeDrillPlanSchema.safeParse(plan).success).toBeTrue()
+    expect(plan).toMatchObject({ source: resumeSource, confirmed: false, selected: [], warnings: ['时间：待补', '负责合同状态机与合同编号幂等控制，通过 RabbitMQ 事件同步合同状态，解决重复回调与重复消费问题。效率提升约30%，统计口径待确认。'] })
+    expect(await f.service.resumePlans(context)).toEqual([plan])
+    expect(await f.service.resumePlans({ ...context, userId: 'user-b' })).toEqual([])
+    expect((await f.service.queue(context)).active_sessions).toEqual([])
+    expect((await f.sessions.get(plan.plan_id, 'user-a'))?.status).toBe('prepared')
+    expect(f.ai.calls[0]![0]!.content).toContain(JSON.stringify(resumeSource.text))
+    expect(f.ai.calls[0]![0]!.content).toContain('业务金额不能当成 QPS')
+  })
+  test('rejects projects from another version, rewritten quotes, unknown topics, duplicate points and invalid model structures without saving', async () => {
+    for (const response of [outline({ project: '另一个版本的数据平台' }), outline({ evidence: '根据模型总结添加的架构与吞吐量，不在原文中' }), outline({ topic: 'unknown' }), '{"points":[]}', '{"points":"invalid"}']) {
+      const f = await fixture([response])
+      await expect(f.service.previewResume(context, resumeSource)).rejects.toMatchObject({ status: 502 })
+      expect(await f.service.resumePlans(context)).toEqual([])
+    }
+    const point = JSON.parse(outline()).points[0]
+    const f = await fixture([JSON.stringify({ points: [point, point] })])
+    await expect(f.service.previewResume(context, resumeSource)).rejects.toMatchObject({ status: 502 })
+  })
+  test('requires unchanged source and selected server-owned IDs; confirmation is atomic and cross-account safe', async () => {
+    const f = await fixture([outline()]); const plan = await f.service.previewResume(context, resumeSource)
+    await expect(f.service.startResume(context, { plan_id: plan.plan_id, point_id: '1', stage: 'foundation' })).rejects.toMatchObject({ status: 409 })
+    await expect(f.service.confirmResume(context, plan.plan_id, { revision: 0, source: { ...resumeSource, text: resumeSource.text + '修改' }, selected: ['1'] })).rejects.toMatchObject({ status: 409 })
+    for (const selected of [[], ['unknown'], ['1', '1']]) await expect(f.service.confirmResume(context, plan.plan_id, { revision: 0, source: resumeSource, selected })).rejects.toMatchObject({ status: 422 })
+    await expect(f.service.confirmResume({ ...context, userId: 'user-b' }, plan.plan_id, { revision: 0, source: resumeSource, selected: ['1'] })).rejects.toMatchObject({ status: 404 })
+    const results = await Promise.allSettled([1, 2].map(() => f.service.confirmResume(context, plan.plan_id, { revision: 0, source: resumeSource, selected: ['1'] })))
+    expect(results.filter(result => result.status === 'fulfilled')).toHaveLength(1)
+    expect((results.find(result => result.status === 'rejected') as PromiseRejectedResult).reason.status).toBe(409)
+    expect((await f.service.resumePlans(context))[0]).toMatchObject({ confirmed: true, revision: 1, selected: ['1'] })
+  })
+  test('binds quotes to their project section and keeps two resume versions separate, even beyond the recent-list limit', async () => {
+    const f = await fixture([outline()])
+    const first = await confirmedPlan(f)
+    const secondSource = { id: 'backend', title: '合成通用后端版', text: resumeSource.text.replace('合成融资项目', '合成数据平台') }
+    f.ai.replies.push(outline({ project: '合成数据平台' }))
+    const second = await f.service.previewResume(context, secondSource)
+    expect(second.source).toEqual(secondSource)
+    expect(f.ai.calls.at(-1)![0]!.content).not.toContain('合成融资项目')
+    const mixedSource = { ...resumeSource, text: '## 合成数据平台\n负责报表查询、权限校验与字段治理，维护多模块后台接口。\n' + resumeSource.text }
+    f.ai.replies.push(outline({ project: '合成数据平台' }))
+    await expect(f.service.previewResume(context, mixedSource)).rejects.toMatchObject({ status: 502 })
+    for (let i = 0; i < 20; i++) {
+      f.ai.replies.push(outline()); await f.service.previewResume(context, { ...resumeSource, id: 'later-' + i })
+    }
+    expect((await f.service.resumePlans(context)).some(plan => plan.plan_id === first.plan_id)).toBeFalse()
+    expect(await f.service.resumePlan(context, first.plan_id)).toEqual(first)
+    await expect(f.service.resumePlan({ ...context, userId: 'user-b' }, first.plan_id)).rejects.toMatchObject({ status: 404 })
+  })
+  test('only selected outline points can start training', async () => {
+    const data = JSON.parse(outline()); data.points.push({ ...data.points[0], point: '状态机并发控制' })
+    const f = await fixture([JSON.stringify(data)])
+    const plan = await confirmedPlan(f)
+    await expect(f.service.startResume(context, { plan_id: plan.plan_id, point_id: '2', stage: 'application' })).rejects.toMatchObject({ status: 409 })
+    expect(f.ai.calls).toHaveLength(1)
+  })
+  test('offers all three stages using the confirmed snapshot; variants and refresh retain the same project evidence', async () => {
+    const f = await fixture([outline(), generated(), generated(2), generated(2), feedback(3), generated(1)])
+    const plan = await confirmedPlan(f)
+    const foundation = await f.service.startResume(context, { plan_id: plan.plan_id, point_id: '1', stage: 'foundation' })
+    expect(foundation.state.questions.map(question => question.kind)).toEqual(['judgment', 'choice', 'code', 'scenario'])
+    const application = await f.service.startResume(context, { plan_id: plan.plan_id, point_id: '1', stage: 'application' })
+    expect(application.state.questions.map(question => question.kind)).toEqual(['scenario', 'code'])
+    let expression = await f.service.startResume(context, { plan_id: plan.plan_id, point_id: '1', stage: 'expression' })
+    expect(expression.state.questions.map(question => question.kind)).toEqual(['scenario', 'scenario'])
+    expression = await action(f, expression, { action: 'answer', answer: '我的项目贡献尚未说清' })
+    expression = await action(f, expression, { action: 'variant' })
+    expect(expression.state.questions[2]).toMatchObject({ kind: 'scenario', primed: true, resume_context: { source_id: resumeSource.id, project: '合成融资项目', stage: 'expression' } })
+    expect(await f.service.session(context, expression.session_id)).toEqual(expression)
+    expect(DrillSessionSchema.safeParse(expression).success).toBeTrue()
+    await expect(f.service.startResume({ ...context, userId: 'user-b' }, { plan_id: plan.plan_id, point_id: '1', stage: 'foundation' })).rejects.toMatchObject({ status: 404 })
+    expect(f.ai.calls.every(messages => /JSON/i.test(messages[0]!.content))).toBeTrue()
+    expect(f.ai.options.every(options => options?.jsonMode)).toBeTrue()
+  })
+  test('expression mistakes reuse canonical spacing while expression scores never enter technical mastery or technical averages', async () => {
+    const f = await fixture([outline(), generated(2), feedback(3), generated(1), feedback(9), generated(1), feedback(9)])
+    const plan = await confirmedPlan(f)
+    let s = await f.service.startResume(context, { plan_id: plan.plan_id, point_id: '1', stage: 'expression' })
+    s = await action(f, s, { action: 'answer', answer: '缺少个人贡献与数据依据' })
+    const queue = await f.service.queue(context)
+    expect(queue.items[0]).toMatchObject({ evidence: 'needs_review', next_review: '2026-10-14', resume_context: { stage: 'expression', source_id: resumeSource.id } })
+    expect((await f.repository.load('user-a')).weak_points[0]?.axis).toBe('performance')
+    expect((await f.repository.load('user-a')).topic_mastery).toEqual({})
+    s = await f.service.finish(context, s.session_id, s.state.revision)
+    expect((await f.sessions.get(s.session_id, 'user-a'))?.overall).toMatchObject({ avg_score: null, independent_avg_score: null, project_expression_avg_score: 3 })
+    for (const day of ['2026-10-14', '2026-10-15']) {
+      f.setDate(day + 'T10:00:00Z')
+      s = await f.service.start(context, { topic: 'java', source: 'due' })
+      expect(s.state.questions[0]).toMatchObject({ kind: 'scenario', resume_context: { project: '合成融资项目', stage: 'expression' } })
+      s = await action(f, s, { action: 'answer', answer: '独立讲清贡献、方案取舍与尚待验证的指标' })
+    }
+    const profile = await f.repository.load('user-a')
+    expect(profile.weak_points[0]).toMatchObject({ axis: 'performance', improved: true, sr: { interval_days: 3, next_review: '2026-10-18' } })
+    expect(profile.topic_mastery).toEqual({})
+    expect(f.ai.calls.at(-2)![0]!.content).toContain('合成融资项目')
+  })
+  test('technical application mistakes preserve the source through due review and independent answers update technical mastery', async () => {
+    const f = await fixture([outline(), generated(2), feedback(2), generated(1), feedback(9)])
+    const plan = await confirmedPlan(f)
+    let s = await f.service.startResume(context, { plan_id: plan.plan_id, point_id: '1', stage: 'application' })
+    s = await action(f, s, { action: 'answer', answer: '第一次遗漏事务边界' })
+    f.setDate('2026-10-14T10:00:00Z')
+    s = await f.service.start(context, { topic: 'java', source: 'due' })
+    expect(s.state.questions[0]?.resume_context?.evidence).toBe(plan.points[0]?.evidence)
+    s = await action(f, s, { action: 'answer', answer: '独立说明原理与失败边界' })
+    expect((await f.repository.load('user-a')).topic_mastery.java).toBeDefined()
+    expect((await f.service.queue(context)).items[0]).toMatchObject({ answer: '第一次遗漏事务边界', resume_context: { source_title: resumeSource.title } })
+  })
+  test('deleting the original expression session cannot silently turn performance review into technical scoring', async () => {
+    const f = await fixture([outline(), generated(2), feedback(3)])
+    const plan = await confirmedPlan(f)
+    let s = await f.service.startResume(context, { plan_id: plan.plan_id, point_id: '1', stage: 'expression' })
+    s = await action(f, s, { action: 'answer', answer: '遗漏表达依据' })
+    await f.sessions.delete(s.session_id, 'user-a')
+    f.setDate('2026-10-14T10:00:00Z')
+    expect((await f.service.queue(context)).items[0]).toMatchObject({ axis: 'performance', question: null, due: true })
+    await expect(f.service.start(context, { topic: 'java', source: 'due' })).rejects.toMatchObject({ status: 422 })
+    expect(f.ai.calls).toHaveLength(3)
+    expect((await f.repository.load('user-a')).topic_mastery).toEqual({})
+  })
+  test('no technical reference is an explicit error; expression feedback requires only source facts and does not invent technical knowledge', async () => {
+    const f = await fixture([outline(), generated(2), feedback(9)]); const plan = await confirmedPlan(f); f.setKnowledge('')
+    await expect(f.service.startResume(context, { plan_id: plan.plan_id, point_id: '1', stage: 'application' })).rejects.toMatchObject({ status: 422 })
+    let s = await f.service.startResume(context, { plan_id: plan.plan_id, point_id: '1', stage: 'expression' })
+    s = await action(f, s, { action: 'answer', answer: '说明个人职责边界与待确认成果证据' })
+    expect(s.state.progress['1']?.attempt?.feedback.score).toBe(9)
+    expect(f.ai.calls.at(-1)![0]!.content).toContain('score 是表达分，不是技术分')
+    expect((await f.repository.load('user-a')).topic_mastery).toEqual({})
+  })
+  test('resume HTTP routes enforce authentication, source size and server-owned selection', async () => {
+    const f = await fixture([outline(), generated(2)]); const app = boundaryApp({ drill: f.service })
+    const post = (path: string, input: unknown) => app.request(path, { method: 'POST', headers: jsonHeaders, body: JSON.stringify(input) })
+    expect((await app.request('/api/drill/resume/plans')).status).toBe(401)
+    expect((await post('/api/drill/resume/preview', { ...resumeSource, text: 'x'.repeat(20001) })).status).toBe(422)
+    const response = await post('/api/drill/resume/preview', resumeSource)
+    expect(response.status).toBe(200)
+    const plan = ResumeDrillPlanSchema.parse(await response.json())
+    expect((await app.request(`/api/drill/resume/plan/${plan.plan_id}`, { headers: jsonHeaders })).status).toBe(200)
+    expect((await post(`/api/drill/resume/plan/${plan.plan_id}/confirm`, { revision: 0, source: resumeSource, selected: ['1'] })).status).toBe(200)
+    expect((await post('/api/drill/resume/start', { plan_id: plan.plan_id, point_id: '1', stage: 'application', project: '伪造来源' })).status).toBe(422)
+    const start = await post('/api/drill/resume/start', { plan_id: plan.plan_id, point_id: '1', stage: 'application' })
+    expect(start.status).toBe(200); expect(DrillSessionSchema.safeParse(await start.json()).success).toBeTrue()
   })
 })

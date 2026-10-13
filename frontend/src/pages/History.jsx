@@ -121,7 +121,8 @@ export default function History() {
   // Guided sessions keep their own recorded assistance and per-question feedback.
   // Other sessions retain the existing status-based interview/review flow.
   const openSession = (session) => {
-    if (session.meta?.drill_learning) navigate(`/topic-drill/learn/${encodeURIComponent(session.session_id)}`);
+    if (session.meta?.resume_drill_plan) navigate(`/topic-drill/resume?plan=${encodeURIComponent(session.session_id)}`);
+    else if (session.meta?.drill_learning) navigate(`/topic-drill/learn/${encodeURIComponent(session.session_id)}`);
     else if (session.status === "prepared") navigate(`/mock-interview?mode=targeted&session=${encodeURIComponent(session.session_id)}`);
     else if (session.status === "reviewed") navigate(`/review/${session.session_id}`);
     else navigate(`/interview/${session.session_id}`);
@@ -410,7 +411,7 @@ function HistorySummaryChip({ label, value, hint, valueClassName = "text-primary
 
 function HistoryRow({ session, onOpen, onDelete, onRetry, retrying }) {
   const badge = MODE_BADGES[session.mode] || MODE_BADGES.resume;
-  const title = session.meta?.position || session.topic || "综合";
+  const title = session.meta?.resume_drill_plan ? `简历题库 · ${session.meta.resume_drill_plan.source.title}` : session.meta?.position || session.topic || "综合";
   const subtitle = session.meta?.company || "";
   const createdDate = session.created_at?.slice(0, 10);
   const compactSessionId = formatSessionId(session.session_id);
@@ -446,6 +447,9 @@ function HistoryRow({ session, onOpen, onDelete, onRetry, retrying }) {
                 <TopicBadge topic={session.topic} mode={session.mode} />
               )}
               <ScorePill score={session.avg_score} />
+              {session.meta?.drill_learning?.questions?.some(question => question.resume_context?.stage === "expression") && (
+                <span className="text-xs text-dim">含项目表达，单独评分</span>
+              )}
               {session.meta?.drill_learning && <span className="text-xs text-dim">带教练习分，不代表独立掌握</span>}
               {createdDate && (
                 <div className="inline-flex items-center gap-1.5 text-[13px] text-dim tabular-nums">

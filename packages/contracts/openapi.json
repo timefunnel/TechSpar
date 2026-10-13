@@ -6176,6 +6176,1101 @@
         ]
       }
     },
+    "/api/drill/resume/plans": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Latest 20 account-owned resume outlines",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "version": {
+                        "type": "number",
+                        "enum": [
+                          1
+                        ]
+                      },
+                      "revision": {
+                        "type": "integer",
+                        "minimum": 0
+                      },
+                      "plan_id": {
+                        "type": "string"
+                      },
+                      "source": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 200
+                          },
+                          "title": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 200
+                          },
+                          "text": {
+                            "type": "string",
+                            "minLength": 40,
+                            "maxLength": 20000
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "title",
+                          "text"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "points": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string"
+                            },
+                            "topic": {
+                              "type": "string"
+                            },
+                            "point": {
+                              "type": "string"
+                            },
+                            "project": {
+                              "type": "string"
+                            },
+                            "evidence": {
+                              "type": "string"
+                            },
+                            "pending_facts": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "topic",
+                            "point",
+                            "project",
+                            "evidence",
+                            "pending_facts"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "selected": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      },
+                      "confirmed": {
+                        "type": "boolean"
+                      },
+                      "warnings": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "required": [
+                      "version",
+                      "revision",
+                      "plan_id",
+                      "source",
+                      "points",
+                      "selected",
+                      "confirmed",
+                      "warnings"
+                    ],
+                    "additionalProperties": false
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/drill/resume/preview": {
+      "post": {
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200
+                  },
+                  "title": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200
+                  },
+                  "text": {
+                    "type": "string",
+                    "minLength": 40,
+                    "maxLength": 20000
+                  }
+                },
+                "required": [
+                  "id",
+                  "title",
+                  "text"
+                ],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Source-bound resume learning outline",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "version": {
+                      "type": "number",
+                      "enum": [
+                        1
+                      ]
+                    },
+                    "revision": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "plan_id": {
+                      "type": "string"
+                    },
+                    "source": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 200
+                        },
+                        "title": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 200
+                        },
+                        "text": {
+                          "type": "string",
+                          "minLength": 40,
+                          "maxLength": 20000
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "title",
+                        "text"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "points": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "topic": {
+                            "type": "string"
+                          },
+                          "point": {
+                            "type": "string"
+                          },
+                          "project": {
+                            "type": "string"
+                          },
+                          "evidence": {
+                            "type": "string"
+                          },
+                          "pending_facts": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "topic",
+                          "point",
+                          "project",
+                          "evidence",
+                          "pending_facts"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "selected": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "confirmed": {
+                      "type": "boolean"
+                    },
+                    "warnings": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "required": [
+                    "version",
+                    "revision",
+                    "plan_id",
+                    "source",
+                    "points",
+                    "selected",
+                    "confirmed",
+                    "warnings"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/drill/resume/plan/{session_id}": {
+      "get": {
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "required": true,
+            "name": "session_id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Source-bound resume learning outline",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "version": {
+                      "type": "number",
+                      "enum": [
+                        1
+                      ]
+                    },
+                    "revision": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "plan_id": {
+                      "type": "string"
+                    },
+                    "source": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 200
+                        },
+                        "title": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 200
+                        },
+                        "text": {
+                          "type": "string",
+                          "minLength": 40,
+                          "maxLength": 20000
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "title",
+                        "text"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "points": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "topic": {
+                            "type": "string"
+                          },
+                          "point": {
+                            "type": "string"
+                          },
+                          "project": {
+                            "type": "string"
+                          },
+                          "evidence": {
+                            "type": "string"
+                          },
+                          "pending_facts": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "topic",
+                          "point",
+                          "project",
+                          "evidence",
+                          "pending_facts"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "selected": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "confirmed": {
+                      "type": "boolean"
+                    },
+                    "warnings": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "required": [
+                    "version",
+                    "revision",
+                    "plan_id",
+                    "source",
+                    "points",
+                    "selected",
+                    "confirmed",
+                    "warnings"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/drill/resume/plan/{session_id}/confirm": {
+      "post": {
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "required": true,
+            "name": "session_id",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "revision": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "source": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 200
+                      },
+                      "title": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 200
+                      },
+                      "text": {
+                        "type": "string",
+                        "minLength": 40,
+                        "maxLength": 20000
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "title",
+                      "text"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "selected": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 200
+                    },
+                    "minItems": 1,
+                    "maxItems": 12
+                  }
+                },
+                "required": [
+                  "revision",
+                  "source",
+                  "selected"
+                ],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Source-bound resume learning outline",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "version": {
+                      "type": "number",
+                      "enum": [
+                        1
+                      ]
+                    },
+                    "revision": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "plan_id": {
+                      "type": "string"
+                    },
+                    "source": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 200
+                        },
+                        "title": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 200
+                        },
+                        "text": {
+                          "type": "string",
+                          "minLength": 40,
+                          "maxLength": 20000
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "title",
+                        "text"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "points": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "topic": {
+                            "type": "string"
+                          },
+                          "point": {
+                            "type": "string"
+                          },
+                          "project": {
+                            "type": "string"
+                          },
+                          "evidence": {
+                            "type": "string"
+                          },
+                          "pending_facts": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "topic",
+                          "point",
+                          "project",
+                          "evidence",
+                          "pending_facts"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "selected": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "confirmed": {
+                      "type": "boolean"
+                    },
+                    "warnings": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "required": [
+                    "version",
+                    "revision",
+                    "plan_id",
+                    "source",
+                    "points",
+                    "selected",
+                    "confirmed",
+                    "warnings"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/drill/resume/start": {
+      "post": {
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "plan_id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200
+                  },
+                  "point_id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200
+                  },
+                  "stage": {
+                    "type": "string",
+                    "enum": [
+                      "foundation",
+                      "application",
+                      "expression"
+                    ]
+                  }
+                },
+                "required": [
+                  "plan_id",
+                  "point_id",
+                  "stage"
+                ],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Server-owned guided learning state",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "session_id": {
+                      "type": "string"
+                    },
+                    "topic": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "ongoing",
+                        "reviewed"
+                      ]
+                    },
+                    "state": {
+                      "type": "object",
+                      "properties": {
+                        "version": {
+                          "type": "number",
+                          "enum": [
+                            1
+                          ]
+                        },
+                        "revision": {
+                          "type": "integer",
+                          "minimum": 0
+                        },
+                        "source": {
+                          "type": "string",
+                          "enum": [
+                            "new",
+                            "due",
+                            "mistakes"
+                          ]
+                        },
+                        "questions": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string"
+                              },
+                              "question": {
+                                "type": "string"
+                              },
+                              "focus_area": {
+                                "type": "string"
+                              },
+                              "difficulty": {
+                                "type": "number"
+                              },
+                              "kind": {
+                                "type": "string",
+                                "enum": [
+                                  "judgment",
+                                  "choice",
+                                  "code",
+                                  "scenario"
+                                ]
+                              },
+                              "options": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string"
+                                }
+                              },
+                              "review_point": {
+                                "type": "string"
+                              },
+                              "primed": {
+                                "type": "boolean"
+                              },
+                              "resume_context": {
+                                "type": "object",
+                                "properties": {
+                                  "plan_id": {
+                                    "type": "string"
+                                  },
+                                  "source_id": {
+                                    "type": "string"
+                                  },
+                                  "source_title": {
+                                    "type": "string"
+                                  },
+                                  "point_id": {
+                                    "type": "string"
+                                  },
+                                  "project": {
+                                    "type": "string"
+                                  },
+                                  "evidence": {
+                                    "type": "string"
+                                  },
+                                  "pending_facts": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "stage": {
+                                    "type": "string",
+                                    "enum": [
+                                      "foundation",
+                                      "application",
+                                      "expression"
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "plan_id",
+                                  "source_id",
+                                  "source_title",
+                                  "point_id",
+                                  "project",
+                                  "evidence",
+                                  "pending_facts",
+                                  "stage"
+                                ],
+                                "additionalProperties": false
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "question",
+                              "focus_area",
+                              "difficulty",
+                              "kind",
+                              "options",
+                              "review_point",
+                              "primed"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "progress": {
+                          "type": "object",
+                          "additionalProperties": {
+                            "type": "object",
+                            "properties": {
+                              "exposure_at": {
+                                "type": "string"
+                              },
+                              "hints": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string"
+                                }
+                              },
+                              "explanation": {
+                                "type": "object",
+                                "properties": {
+                                  "short_answer": {
+                                    "type": "string"
+                                  },
+                                  "detailed_answer": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "short_answer",
+                                  "detailed_answer"
+                                ],
+                                "additionalProperties": false
+                              },
+                              "attempt": {
+                                "type": "object",
+                                "properties": {
+                                  "id": {
+                                    "type": "string"
+                                  },
+                                  "answer": {
+                                    "type": "string"
+                                  },
+                                  "reason": {
+                                    "type": "string",
+                                    "nullable": true,
+                                    "enum": [
+                                      "forgot",
+                                      "unclear",
+                                      "expression",
+                                      null
+                                    ]
+                                  },
+                                  "at": {
+                                    "type": "string"
+                                  },
+                                  "assistance": {
+                                    "type": "string",
+                                    "enum": [
+                                      "independent",
+                                      "hinted",
+                                      "explained",
+                                      "after_feedback"
+                                    ]
+                                  },
+                                  "outcome": {
+                                    "type": "string",
+                                    "enum": [
+                                      "independent_correct",
+                                      "assisted_correct",
+                                      "needs_review"
+                                    ]
+                                  },
+                                  "feedback": {
+                                    "type": "object",
+                                    "properties": {
+                                      "score": {
+                                        "type": "number",
+                                        "minimum": 0,
+                                        "maximum": 10
+                                      },
+                                      "correct_points": {
+                                        "type": "array",
+                                        "items": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "missing_points": {
+                                        "type": "array",
+                                        "items": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "misconceptions": {
+                                        "type": "array",
+                                        "items": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "short_answer": {
+                                        "type": "string"
+                                      },
+                                      "detailed_answer": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "score",
+                                      "correct_points",
+                                      "missing_points",
+                                      "misconceptions",
+                                      "short_answer",
+                                      "detailed_answer"
+                                    ],
+                                    "additionalProperties": false
+                                  }
+                                },
+                                "required": [
+                                  "id",
+                                  "answer",
+                                  "reason",
+                                  "at",
+                                  "assistance",
+                                  "outcome",
+                                  "feedback"
+                                ],
+                                "additionalProperties": false
+                              },
+                              "recall": {
+                                "type": "object",
+                                "properties": {
+                                  "id": {
+                                    "type": "string"
+                                  },
+                                  "answer": {
+                                    "type": "string"
+                                  },
+                                  "reason": {
+                                    "type": "string",
+                                    "nullable": true,
+                                    "enum": [
+                                      "forgot",
+                                      "unclear",
+                                      "expression",
+                                      null
+                                    ]
+                                  },
+                                  "at": {
+                                    "type": "string"
+                                  },
+                                  "assistance": {
+                                    "type": "string",
+                                    "enum": [
+                                      "independent",
+                                      "hinted",
+                                      "explained",
+                                      "after_feedback"
+                                    ]
+                                  },
+                                  "outcome": {
+                                    "type": "string",
+                                    "enum": [
+                                      "independent_correct",
+                                      "assisted_correct",
+                                      "needs_review"
+                                    ]
+                                  },
+                                  "feedback": {
+                                    "type": "object",
+                                    "properties": {
+                                      "score": {
+                                        "type": "number",
+                                        "minimum": 0,
+                                        "maximum": 10
+                                      },
+                                      "correct_points": {
+                                        "type": "array",
+                                        "items": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "missing_points": {
+                                        "type": "array",
+                                        "items": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "misconceptions": {
+                                        "type": "array",
+                                        "items": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "short_answer": {
+                                        "type": "string"
+                                      },
+                                      "detailed_answer": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "score",
+                                      "correct_points",
+                                      "missing_points",
+                                      "misconceptions",
+                                      "short_answer",
+                                      "detailed_answer"
+                                    ],
+                                    "additionalProperties": false
+                                  }
+                                },
+                                "required": [
+                                  "id",
+                                  "answer",
+                                  "reason",
+                                  "at",
+                                  "assistance",
+                                  "outcome",
+                                  "feedback"
+                                ],
+                                "additionalProperties": false
+                              }
+                            },
+                            "required": [
+                              "hints"
+                            ],
+                            "additionalProperties": false
+                          }
+                        }
+                      },
+                      "required": [
+                        "version",
+                        "revision",
+                        "source",
+                        "questions",
+                        "progress"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "session_id",
+                    "topic",
+                    "status",
+                    "state"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
     "/api/drill/queue": {
       "get": {
         "parameters": [
@@ -6205,6 +7300,12 @@
                       "items": {
                         "type": "object",
                         "properties": {
+                          "axis": {
+                            "type": "string",
+                            "enum": [
+                              "performance"
+                            ]
+                          },
                           "point": {
                             "type": "string"
                           },
@@ -6250,6 +7351,54 @@
                               "needs_review",
                               "weak_point"
                             ]
+                          },
+                          "resume_context": {
+                            "type": "object",
+                            "properties": {
+                              "plan_id": {
+                                "type": "string"
+                              },
+                              "source_id": {
+                                "type": "string"
+                              },
+                              "source_title": {
+                                "type": "string"
+                              },
+                              "point_id": {
+                                "type": "string"
+                              },
+                              "project": {
+                                "type": "string"
+                              },
+                              "evidence": {
+                                "type": "string"
+                              },
+                              "pending_facts": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string"
+                                }
+                              },
+                              "stage": {
+                                "type": "string",
+                                "enum": [
+                                  "foundation",
+                                  "application",
+                                  "expression"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "plan_id",
+                              "source_id",
+                              "source_title",
+                              "point_id",
+                              "project",
+                              "evidence",
+                              "pending_facts",
+                              "stage"
+                            ],
+                            "additionalProperties": false
                           }
                         },
                         "required": [
@@ -6445,6 +7594,54 @@
                               },
                               "primed": {
                                 "type": "boolean"
+                              },
+                              "resume_context": {
+                                "type": "object",
+                                "properties": {
+                                  "plan_id": {
+                                    "type": "string"
+                                  },
+                                  "source_id": {
+                                    "type": "string"
+                                  },
+                                  "source_title": {
+                                    "type": "string"
+                                  },
+                                  "point_id": {
+                                    "type": "string"
+                                  },
+                                  "project": {
+                                    "type": "string"
+                                  },
+                                  "evidence": {
+                                    "type": "string"
+                                  },
+                                  "pending_facts": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "stage": {
+                                    "type": "string",
+                                    "enum": [
+                                      "foundation",
+                                      "application",
+                                      "expression"
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "plan_id",
+                                  "source_id",
+                                  "source_title",
+                                  "point_id",
+                                  "project",
+                                  "evidence",
+                                  "pending_facts",
+                                  "stage"
+                                ],
+                                "additionalProperties": false
                               }
                             },
                             "required": [
@@ -6817,6 +8014,54 @@
                               },
                               "primed": {
                                 "type": "boolean"
+                              },
+                              "resume_context": {
+                                "type": "object",
+                                "properties": {
+                                  "plan_id": {
+                                    "type": "string"
+                                  },
+                                  "source_id": {
+                                    "type": "string"
+                                  },
+                                  "source_title": {
+                                    "type": "string"
+                                  },
+                                  "point_id": {
+                                    "type": "string"
+                                  },
+                                  "project": {
+                                    "type": "string"
+                                  },
+                                  "evidence": {
+                                    "type": "string"
+                                  },
+                                  "pending_facts": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "stage": {
+                                    "type": "string",
+                                    "enum": [
+                                      "foundation",
+                                      "application",
+                                      "expression"
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "plan_id",
+                                  "source_id",
+                                  "source_title",
+                                  "point_id",
+                                  "project",
+                                  "evidence",
+                                  "pending_facts",
+                                  "stage"
+                                ],
+                                "additionalProperties": false
                               }
                             },
                             "required": [
@@ -7241,6 +8486,54 @@
                               },
                               "primed": {
                                 "type": "boolean"
+                              },
+                              "resume_context": {
+                                "type": "object",
+                                "properties": {
+                                  "plan_id": {
+                                    "type": "string"
+                                  },
+                                  "source_id": {
+                                    "type": "string"
+                                  },
+                                  "source_title": {
+                                    "type": "string"
+                                  },
+                                  "point_id": {
+                                    "type": "string"
+                                  },
+                                  "project": {
+                                    "type": "string"
+                                  },
+                                  "evidence": {
+                                    "type": "string"
+                                  },
+                                  "pending_facts": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "stage": {
+                                    "type": "string",
+                                    "enum": [
+                                      "foundation",
+                                      "application",
+                                      "expression"
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "plan_id",
+                                  "source_id",
+                                  "source_title",
+                                  "point_id",
+                                  "project",
+                                  "evidence",
+                                  "pending_facts",
+                                  "stage"
+                                ],
+                                "additionalProperties": false
                               }
                             },
                             "required": [
@@ -7633,6 +8926,54 @@
                               },
                               "primed": {
                                 "type": "boolean"
+                              },
+                              "resume_context": {
+                                "type": "object",
+                                "properties": {
+                                  "plan_id": {
+                                    "type": "string"
+                                  },
+                                  "source_id": {
+                                    "type": "string"
+                                  },
+                                  "source_title": {
+                                    "type": "string"
+                                  },
+                                  "point_id": {
+                                    "type": "string"
+                                  },
+                                  "project": {
+                                    "type": "string"
+                                  },
+                                  "evidence": {
+                                    "type": "string"
+                                  },
+                                  "pending_facts": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "stage": {
+                                    "type": "string",
+                                    "enum": [
+                                      "foundation",
+                                      "application",
+                                      "expression"
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "plan_id",
+                                  "source_id",
+                                  "source_title",
+                                  "point_id",
+                                  "project",
+                                  "evidence",
+                                  "pending_facts",
+                                  "stage"
+                                ],
+                                "additionalProperties": false
                               }
                             },
                             "required": [

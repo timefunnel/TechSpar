@@ -2,6 +2,7 @@ import { Database } from 'bun:sqlite'
 import type {
   InterviewAnswer,
   DrillState,
+  ResumeDrillPlan,
   InterviewMode,
   InterviewQuestion,
   InterviewSession,
@@ -162,10 +163,22 @@ export class BunInterviewSessionRepository implements InterviewSessionRepository
     }).immediate()
   }
 
-  async create(input: { sessionId: string; userId: string; mode: InterviewMode; topic?: string; questions?: InterviewQuestion[]; meta?: Record<string, unknown> }): Promise<void> {
-    this.sqlite.query(`INSERT INTO sessions (session_id, mode, topic, meta, questions, status, user_id) VALUES ($id, $mode, $topic, $meta, $questions, 'ongoing', $userId)`).run({
-      $id: input.sessionId, $mode: input.mode, $topic: input.topic ?? null, $meta: JSON.stringify(input.meta || {}), $questions: JSON.stringify(input.questions || []), $userId: input.userId,
+  async create(input: { sessionId: string; userId: string; mode: InterviewMode; topic?: string; questions?: InterviewQuestion[]; meta?: Record<string, unknown>; status?: 'ongoing' | 'prepared' }): Promise<void> {
+    this.sqlite.query(`INSERT INTO sessions (session_id, mode, topic, meta, questions, status, user_id) VALUES ($id, $mode, $topic, $meta, $questions, $status, $userId)`).run({
+      $id: input.sessionId, $mode: input.mode, $topic: input.topic ?? null, $meta: JSON.stringify(input.meta || {}), $questions: JSON.stringify(input.questions || []), $status: input.status ?? 'ongoing', $userId: input.userId,
     })
+  }
+
+  async confirmResumeDrillPlan(input: { sessionId: string; userId: string; expectedRevision: number; plan: ResumeDrillPlan }): Promise<boolean> {
+    return this.sqlite.transaction(() => {
+      const row = this.sqlite.query<SessionRow, [string, string]>('SELECT * FROM sessions WHERE session_id = ? AND user_id = ?').get(input.sessionId, input.userId)
+      if (!row || row.mode !== 'topic_drill' || row.status !== 'prepared') return false
+      const meta = json<Record<string, unknown>>(row.meta, {})
+      const plan = meta.resume_drill_plan as ResumeDrillPlan | undefined
+      if (!plan || plan.confirmed || plan.revision !== input.expectedRevision || input.plan.revision !== input.expectedRevision + 1) return false
+      meta.resume_drill_plan = input.plan
+      return this.sqlite.query('UPDATE sessions SET meta = ?, updated_at = CURRENT_TIMESTAMP WHERE session_id = ? AND user_id = ?').run(JSON.stringify(meta), input.sessionId, input.userId).changes === 1
+    }).immediate()
   }
 
   async get(sessionId: string, userId: string): Promise<InterviewSession | undefined> {

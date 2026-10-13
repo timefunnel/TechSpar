@@ -505,9 +505,10 @@ export class ProfileService implements ProfileUseCases, CandidateProfilePort {
       prepare(profile)
       const applied = object(profile._drill_applied_attempts)
       if (Object.hasOwn(applied, attempt.id)) return
-      let point = profile.weak_points.find(item => item.topic === topic && item.point === question.review_point && item.source !== 'consolidated' && item.axis !== 'performance')
+      const expression = question.resume_context?.stage === 'expression'
+      let point = profile.weak_points.find(item => item.topic === topic && item.point === question.review_point && item.source !== 'consolidated' && (expression ? item.axis === 'performance' : item.axis !== 'performance'))
       if (!point) {
-        point = { point: question.review_point, topic, source: 'observed', first_seen: attempt.at, times_seen: 0, improved: false }
+        point = { point: question.review_point, topic, source: 'observed', ...(expression ? { axis: 'performance' as const } : {}), first_seen: attempt.at, times_seen: 0, improved: false }
         profile.weak_points.push(point)
       }
       const productive = question.kind === 'code' || question.kind === 'scenario'
@@ -533,7 +534,7 @@ export class ProfileService implements ProfileUseCases, CandidateProfilePort {
       entries.push({ date: attempt.at, event: 'drill_reviewed', score: attempt.feedback.score, effective_score: effectiveScore, assistance: attempt.assistance, outcome: attempt.outcome, qualifies, affects_schedule: true, session_id: sessionId, question_id: question.id })
       if (point.improved) point.improved_at = attempt.at
       else delete point.improved_at
-      if (attempt.assistance === 'independent' && productive) {
+      if (!expression && attempt.assistance === 'independent' && productive) {
         updateMastery(profile, { topic, questions: [question], scores: [{ question_id: question.id, score: attempt.feedback.score, difficulty: question.difficulty }] }, {}, attempt.at)
       }
       applied[attempt.id] = true

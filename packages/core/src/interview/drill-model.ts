@@ -3,6 +3,11 @@ import type { RequestContext } from '../kernel/context.ts'
 
 export const DRILL_KINDS = ['judgment', 'choice', 'code', 'scenario'] as const
 export type DrillKind = typeof DRILL_KINDS[number]
+export type ResumeDrillSource = { id: string; title: string; text: string }
+export type ResumeDrillPoint = { id: string; topic: string; point: string; project: string; evidence: string; pending_facts: string[] }
+export type ResumeDrillPlan = { version: 1; revision: number; plan_id: string; source: ResumeDrillSource; points: ResumeDrillPoint[]; selected: string[]; confirmed: boolean; warnings: string[] }
+export type ResumeDrillStage = 'foundation' | 'application' | 'expression'
+export type ResumeDrillContext = { plan_id: string; source_id: string; source_title: string; point_id: string; project: string; evidence: string; pending_facts: string[]; stage: ResumeDrillStage }
 export type DrillQuestion = {
   id: string
   question: string
@@ -12,6 +17,7 @@ export type DrillQuestion = {
   options: string[]
   review_point: string
   primed: boolean
+  resume_context?: ResumeDrillContext
 }
 export type DrillFeedback = {
   score: number
@@ -46,6 +52,7 @@ export type DrillState = {
 }
 export type DrillSessionView = { session_id: string; topic: string; status: 'ongoing' | 'reviewed'; state: DrillState }
 export type DrillReviewItem = {
+  axis?: 'performance'
   point: string
   topic: string
   question: string | null
@@ -57,6 +64,7 @@ export type DrillReviewItem = {
   due: boolean
   improved: boolean
   evidence: 'historical_unknown' | 'independent_correct' | 'assisted_correct' | 'needs_review' | 'weak_point'
+  resume_context?: ResumeDrillContext
 }
 export type DrillQueue = {
   today: string
@@ -69,6 +77,11 @@ export interface DrillProfilePort {
   recordDrillAttempt(context: RequestContext, observation: DrillProfileObservation): Promise<void>
 }
 export interface DrillUseCases {
+  resumePlans(context: RequestContext): Promise<ResumeDrillPlan[]>
+  resumePlan(context: RequestContext, planId: string): Promise<ResumeDrillPlan>
+  previewResume(context: RequestContext, source: ResumeDrillSource): Promise<ResumeDrillPlan>
+  confirmResume(context: RequestContext, planId: string, input: { revision: number; source: ResumeDrillSource; selected: string[] }): Promise<ResumeDrillPlan>
+  startResume(context: RequestContext, input: { plan_id: string; point_id: string; stage: ResumeDrillStage }): Promise<DrillSessionView>
   queue(context: RequestContext, topic?: string): Promise<DrillQueue>
   start(context: RequestContext, input: { topic: string; source: DrillState['source']; points?: string[] }): Promise<DrillSessionView>
   session(context: RequestContext, sessionId: string): Promise<DrillSessionView>
