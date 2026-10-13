@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from 'bun:test'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { DrillLearningService, ProfileService, type ChatMessage, type DrillSessionView, type ProfileDependencies, type RequestContext, type TextGenerationUseCases } from '@techspar/core'
+import { DrillLearningService, ProfileService, type ChatCompleteOptions, type ChatMessage, type DrillSessionView, type ProfileDependencies, type RequestContext, type TextGenerationUseCases } from '@techspar/core'
 import { BunInterviewSessionRepository } from '@techspar/db'
 import { FileCandidateProfileRepository } from '@techspar/platform'
 import { DrillSessionSchema } from '@techspar/contracts'
@@ -16,9 +16,10 @@ const generated = (count = 4, code = true) => JSON.stringify({ questions: Array.
 const feedback = (score = 9) => JSON.stringify({ score, correct_points: ['识别重复风险'], missing_points: score < 8 ? ['失败边界'] : [], misconceptions: [], short_answer: '核心答法示例', detailed_answer: '原理和边界的合成讲解' })
 class FakeAi implements TextGenerationUseCases {
   calls: readonly ChatMessage[][] = []
+  options: Array<ChatCompleteOptions | undefined> = []
   delay: (() => Promise<void>) | undefined
   constructor(public replies: string[] = []) {}
-  async complete(_context: RequestContext, messages: readonly ChatMessage[]) { this.calls = [...this.calls, [...messages]]; if (this.delay) await this.delay(); const result = this.replies.shift(); if (result === undefined) throw new Error('unexpected model call'); return result }
+  async complete(_context: RequestContext, messages: readonly ChatMessage[], options?: ChatCompleteOptions) { this.calls = [...this.calls, [...messages]]; this.options.push(options); if (this.delay) await this.delay(); const result = this.replies.shift(); if (result === undefined) throw new Error('unexpected model call'); return result }
   async *stream() {}
 }
 async function fixture(replies: string[] = []) {
@@ -38,6 +39,18 @@ async function action(f: Awaited<ReturnType<typeof fixture>>, session: DrillSess
 }
 
 describe('guided learning, canonical evidence and review schedule', () => {
+  test('every JSON-mode generation, hint, explanation, grading, recall and variant explicitly requests JSON', async () => {
+    const f = await fixture([generated(), '{"hint":"提示"}', '{"short_answer":"核心答法","detailed_answer":"展开讲解"}', feedback(), feedback(), generated(1)])
+    let s = await f.service.start(context, { topic: 'java', source: 'new' })
+    s = await action(f, s, { action: 'hint', question_id: '3' })
+    s = await action(f, s, { action: 'explain', question_id: '3' })
+    s = await action(f, s, { action: 'answer', question_id: '3', answer: '带解释的回答' })
+    s = await action(f, s, { action: 'recall', question_id: '3', answer: '隐藏答案后的复述' })
+    await action(f, s, { action: 'variant', question_id: '3' })
+    expect(f.ai.calls).toHaveLength(6)
+    expect(f.ai.options.every(options => options?.jsonMode === true)).toBeTrue()
+    expect(f.ai.calls.every(messages => messages.some(message => /json/i.test(message.content)))).toBeTrue()
+  })
   test('generates all four kinds without leaking an answer; persists refresh and rejects cross-account access', async () => {
     const f = await fixture([generated()])
     const s = await f.service.start(context, { topic: 'java', source: 'new' })
