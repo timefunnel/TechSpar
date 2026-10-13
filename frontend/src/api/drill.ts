@@ -1,6 +1,8 @@
 import {
   DrillActionSchema,
   DrillFinishSchema,
+  DrillQuickAnswerRequestSchema,
+  DrillQuickAnswerResponseSchema,
   DrillQueueSchema,
   DrillSessionSchema,
   DrillStartSchema,
@@ -14,6 +16,8 @@ import {
   type ResumeDrillStartInput,
   type DrillSessionResponse,
   type DrillQueueResponse,
+  type DrillQuickAnswerRequest,
+  type DrillQuickAnswerResponse,
   type DrillActionRequest,
   type DrillStartRequest,
 } from "@techspar/contracts";
@@ -22,6 +26,8 @@ import { API_BASE, authFetch } from "./client";
 export type DrillSession = DrillSessionResponse;
 export type DrillQueue = DrillQueueResponse;
 export type DrillAction = DrillActionRequest;
+export type DrillQuickAnswerInput = DrillQuickAnswerRequest;
+export type DrillQuickAnswer = DrillQuickAnswerResponse;
 export type DrillStart = DrillStartRequest;
 export type ResumeDrillPlan = ResumeDrillPlanResponse;
 
@@ -111,6 +117,18 @@ export function actDrill(id: string, input: DrillAction, signal?: AbortSignal) {
     "/session/" + encodeURIComponent(id) + "/action",
     DrillSessionSchema,
     DrillActionSchema.parse(input),
+    signal,
+  );
+}
+export function quickAnswerDrill(
+  id: string,
+  input: DrillQuickAnswerInput,
+  signal?: AbortSignal,
+) {
+  return request(
+    "/session/" + encodeURIComponent(id) + "/quick-answer",
+    DrillQuickAnswerResponseSchema,
+    DrillQuickAnswerRequestSchema.parse(input),
     signal,
   );
 }

@@ -50,6 +50,9 @@ export type DrillState = {
   questions: DrillQuestion[]
   progress: Record<string, DrillProgress>
 }
+export type DrillQuickAnswerIntent = 'explain' | 'compare' | 'current' | 'interview' | 'custom'
+export type DrillQuickAnswerInput = { revision: number; question_id: string; selection: string; intent: DrillQuickAnswerIntent; question?: string }
+export type DrillQuickAnswerResult = { selection: string; intent: DrillQuickAnswerIntent; answer: string }
 export type DrillSessionView = { session_id: string; topic: string; status: 'ongoing' | 'reviewed'; state: DrillState }
 export type DrillReviewItem = {
   axis?: 'performance'
@@ -85,6 +88,7 @@ export interface DrillUseCases {
   queue(context: RequestContext, topic?: string): Promise<DrillQueue>
   start(context: RequestContext, input: { topic: string; source: DrillState['source']; points?: string[] }): Promise<DrillSessionView>
   session(context: RequestContext, sessionId: string): Promise<DrillSessionView>
+  quickAnswer(context: RequestContext, sessionId: string, input: DrillQuickAnswerInput): Promise<DrillQuickAnswerResult>
   act(context: RequestContext, sessionId: string, input: { revision: number; question_id: string; action: 'hint' | 'explain' | 'answer' | 'recall' | 'variant'; answer?: string; reason?: DrillAttempt['reason'] }): Promise<DrillSessionView>
   finish(context: RequestContext, sessionId: string, revision: number): Promise<DrillSessionView>
 }

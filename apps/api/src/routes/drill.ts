@@ -1,6 +1,6 @@
 import { createRoute, type OpenAPIHono } from '@hono/zod-openapi'
 import { z } from 'zod'
-import { DrillActionSchema, DrillFinishSchema, DrillQueueSchema, DrillSessionSchema, DrillStartSchema, ResumeDrillSourceSchema, ResumeDrillPlanSchema, ResumeDrillPlansSchema, ResumeDrillConfirmSchema, ResumeDrillStartSchema } from '@techspar/contracts'
+import { DrillActionSchema, DrillFinishSchema, DrillQueueSchema, DrillQuickAnswerRequestSchema, DrillQuickAnswerResponseSchema, DrillSessionSchema, DrillStartSchema, ResumeDrillSourceSchema, ResumeDrillPlanSchema, ResumeDrillPlansSchema, ResumeDrillConfirmSchema, ResumeDrillStartSchema } from '@techspar/contracts'
 import type { DrillUseCases, TokenService } from '@techspar/core'
 import { authenticatedContext } from '../http/context.ts'
 import { validateResponse } from '../http/response.ts'
@@ -27,6 +27,8 @@ export function registerDrillRoutes(app: OpenAPIHono, deps: { drill: DrillUseCas
     c.json(validateResponse(DrillSessionSchema, await deps.drill.session(await authenticatedContext(c, deps.tokens), c.req.valid('param').session_id), 'GET /api/drill/session/{session_id}', c.get('requestId'))))
   app.openapi(createRoute({ method: 'post', path: '/api/drill/session/{session_id}/action', request: { params, body: { content: { 'application/json': { schema: DrillActionSchema } } } }, responses: response }), async c =>
     c.json(validateResponse(DrillSessionSchema, await deps.drill.act(await authenticatedContext(c, deps.tokens), c.req.valid('param').session_id, c.req.valid('json')), 'POST /api/drill/session/{session_id}/action', c.get('requestId'))))
+  app.openapi(createRoute({ method: 'post', path: '/api/drill/session/{session_id}/quick-answer', request: { params, body: { content: { 'application/json': { schema: DrillQuickAnswerRequestSchema } } } }, responses: { 200: { content: { 'application/json': { schema: DrillQuickAnswerResponseSchema } }, description: 'Context-bound learning answer without grading changes' } } }), async c =>
+    c.json(validateResponse(DrillQuickAnswerResponseSchema, await deps.drill.quickAnswer(await authenticatedContext(c, deps.tokens), c.req.valid('param').session_id, c.req.valid('json')), 'POST /api/drill/session/{session_id}/quick-answer', c.get('requestId'))))
   app.openapi(createRoute({ method: 'post', path: '/api/drill/session/{session_id}/finish', request: { params, body: { content: { 'application/json': { schema: DrillFinishSchema } } } }, responses: response }), async c =>
     c.json(validateResponse(DrillSessionSchema, await deps.drill.finish(await authenticatedContext(c, deps.tokens), c.req.valid('param').session_id, c.req.valid('json').revision), 'POST /api/drill/session/{session_id}/finish', c.get('requestId'))))
 }

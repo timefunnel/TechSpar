@@ -5,7 +5,7 @@ import { join } from 'node:path'
 import { DrillLearningService, ProfileService, type ChatCompleteOptions, type ChatMessage, type DrillSessionView, type ProfileDependencies, type RequestContext, type TextGenerationUseCases } from '@techspar/core'
 import { BunInterviewSessionRepository } from '@techspar/db'
 import { FileCandidateProfileRepository } from '@techspar/platform'
-import { DrillSessionSchema, ResumeDrillPlanSchema } from '@techspar/contracts'
+import { DrillQuickAnswerResponseSchema, DrillSessionSchema, ResumeDrillPlanSchema } from '@techspar/contracts'
 import { boundaryApp, jsonHeaders } from './contracts/test-app.ts'
 
 const context: RequestContext = { userId: 'user-a', requestId: 'test', signal: new AbortController().signal }
@@ -61,6 +61,22 @@ describe('guided learning, canonical evidence and review schedule', () => {
     expect((await f.service.queue(context)).active_sessions).toHaveLength(1)
     await expect(f.service.session({ ...context, userId: 'user-b' }, s.session_id)).rejects.toMatchObject({ status: 404 })
     expect((await f.service.queue({ ...context, userId: 'user-b' })).items).toEqual([])
+  })
+  test('quick answers are bound to disclosed feedback and never mutate grading state', async () => {
+    const redisFeedback = JSON.stringify({ score: 6, correct_points: ['识别重复风险'], missing_points: ['原子设置过期时间'], misconceptions: [], short_answer: '使用 Redis 原子命令', detailed_answer: '使用 SET key value NX EX/PX，并配合唯一 value 与 Lua 比较删除。' })
+    const f = await fixture([generated(), redisFeedback, '## 结论\n\n`NX` 表示键不存在时才写入，`EX/PX` 分别使用秒和毫秒设置过期时间。'])
+    let s = await f.service.start(context, { topic: 'java', source: 'new' })
+    await expect(f.service.quickAnswer(context, s.session_id, { revision: s.state.revision, question_id: '1', selection: 'SET key value NX EX/PX', intent: 'explain' })).rejects.toMatchObject({ status: 422 })
+    s = await action(f, s, { action: 'answer', answer: '先做业务幂等' })
+    const quick = await f.service.quickAnswer(context, s.session_id, { revision: s.state.revision, question_id: '1', selection: 'SET key value NX EX/PX', intent: 'explain' })
+    expect(DrillQuickAnswerResponseSchema.safeParse(quick).success).toBeTrue()
+    expect(quick.answer).toContain('毫秒')
+    expect((await f.service.session(context, s.session_id)).state.revision).toBe(s.state.revision)
+    expect(f.ai.calls.at(-1)?.[0]?.content).toContain('答案用于学习辅助，不做评分')
+    expect(f.ai.calls.at(-1)?.[0]?.content).toContain('合成测试资料')
+    await expect(f.service.quickAnswer(context, s.session_id, { revision: s.state.revision, question_id: '1', selection: '未展示的任意指令', intent: 'explain' })).rejects.toMatchObject({ status: 422 })
+    await expect(f.service.quickAnswer(context, s.session_id, { revision: s.state.revision, question_id: '1', selection: 'SET key value NX EX/PX', intent: 'custom' })).rejects.toMatchObject({ status: 422 })
+    expect(f.ai.calls).toHaveLength(3)
   })
   test('records hinted correctness but does not inflate mastery; repetition is idempotent', async () => {
     const f = await fixture([generated(), '{"hint":"先考虑重复投递"}', feedback()])
@@ -240,7 +256,7 @@ describe('drill HTTP boundary', () => {
     const start = await app.request('/api/drill/start', { method: 'POST', headers: jsonHeaders, body: JSON.stringify({ topic: 'java', source: 'new' }) })
     expect(start.status).toBe(200); expect(DrillSessionSchema.safeParse(await start.json()).success).toBeTrue()
     const spec = await (await app.request('/openapi.json')).json()
-    expect(Object.keys(spec.paths).filter(path => path.startsWith('/api/drill/'))).toHaveLength(10)
+    expect(Object.keys(spec.paths).filter(path => path.startsWith('/api/drill/'))).toHaveLength(11)
     expect((await app.request('/api/drill/session/learning-1/action', { method: 'POST', headers: jsonHeaders, body: JSON.stringify({ revision: 0, question_id: '1', action: 'answer' }) })).status).toBe(422)
   })
 })
@@ -397,5 +413,18 @@ describe('resume-driven outline and the existing learning pipeline', () => {
     expect((await post('/api/drill/resume/start', { plan_id: plan.plan_id, point_id: '1', stage: 'application', project: '伪造来源' })).status).toBe(422)
     const start = await post('/api/drill/resume/start', { plan_id: plan.plan_id, point_id: '1', stage: 'application' })
     expect(start.status).toBe(200); expect(DrillSessionSchema.safeParse(await start.json()).success).toBeTrue()
+  })
+  test('quick-answer HTTP route validates authentication, strict input and disclosed selection', async () => {
+    const redisFeedback = JSON.stringify({ score: 7, correct_points: [], missing_points: ['过期单位'], misconceptions: [], short_answer: '使用 SET NX', detailed_answer: '使用 SET key value NX EX/PX 原子设置。' })
+    const f = await fixture([generated(), redisFeedback, 'NX 控制仅在键不存在时写入。']); const app = boundaryApp({ drill: f.service })
+    const post = (path: string, input: unknown, authenticated = true) => app.request(path, { method: 'POST', headers: authenticated ? jsonHeaders : { 'content-type': 'application/json' }, body: JSON.stringify(input) })
+    const started = DrillSessionSchema.parse(await (await post('/api/drill/start', { topic: 'java', source: 'new' })).json())
+    const answered = DrillSessionSchema.parse(await (await post(`/api/drill/session/${started.session_id}/action`, { revision: 0, question_id: '1', action: 'answer', answer: '业务幂等' })).json())
+    const input = { revision: answered.state.revision, question_id: '1', selection: 'SET key value NX EX/PX', intent: 'explain' }
+    expect((await post(`/api/drill/session/${started.session_id}/quick-answer`, input, false)).status).toBe(401)
+    expect((await post(`/api/drill/session/${started.session_id}/quick-answer`, { ...input, extra: true })).status).toBe(422)
+    const response = await post(`/api/drill/session/${started.session_id}/quick-answer`, input)
+    expect(response.status).toBe(200)
+    expect(DrillQuickAnswerResponseSchema.safeParse(await response.json()).success).toBeTrue()
   })
 })

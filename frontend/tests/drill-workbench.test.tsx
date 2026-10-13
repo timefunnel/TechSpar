@@ -2,7 +2,12 @@ import { afterAll, afterEach, expect, test } from "bun:test";
 import { Window } from "happy-dom";
 import { act } from "react";
 import type { Root } from "react-dom/client";
-import type { DrillAction, DrillSession } from "../src/api/drill";
+import type {
+  DrillAction,
+  DrillQuickAnswer,
+  DrillQuickAnswerInput,
+  DrillSession,
+} from "../src/api/drill";
 
 const browser = new Window({ url: "http://localhost" });
 Object.defineProperty(browser, "SyntaxError", {
@@ -81,6 +86,14 @@ async function mount(
   session: DrillSession,
   onAction: (input: DrillAction) => Promise<boolean>,
   pending = false,
+  onQuickAnswer: (
+    input: DrillQuickAnswerInput,
+    signal: AbortSignal,
+  ) => Promise<DrillQuickAnswer> = async (input) => ({
+    selection: input.selection,
+    intent: input.intent,
+    answer: "合成快捷答疑",
+  }),
 ) {
   if (!root) {
     const host = document.createElement("div");
@@ -93,6 +106,7 @@ async function mount(
         session={session}
         pending={pending}
         onAction={onAction}
+        onQuickAnswer={onQuickAnswer}
         onFinish={() => {}}
       />,
     ),
@@ -214,4 +228,72 @@ test('shows source provenance and expression-only scoring without exposing refer
   await click('隐藏答案并复述');
   expect(document.body.textContent).not.toContain('需要隐藏的核心答案');
   expect(document.body.textContent).toContain('原文依据与待确认信息');
+});
+
+test("opens a context-bound quick-answer panel from selected feedback text", async () => {
+  const s = sample();
+  s.state.progress["1"]!.attempt = {
+    id: "quick",
+    answer: "原回答",
+    at: "2026-10-13T00:00:00Z",
+    reason: null,
+    assistance: "independent",
+    outcome: "needs_review",
+    feedback: {
+      ...feedback,
+      short_answer: "使用 SET key value NX EX/PX 原子加锁",
+    },
+  };
+  const calls: DrillQuickAnswerInput[] = [];
+  await mount(
+    s,
+    async () => true,
+    false,
+    async (input) => {
+      calls.push(input);
+      return {
+        selection: input.selection,
+        intent: input.intent,
+        answer: input.intent === "compare"
+          ? "| 参数 | 单位 |\n|---|---|\n| EX | 秒 |\n| PX | 毫秒 |"
+          : "NX 表示键不存在时才写入。",
+      };
+    },
+  );
+  const paragraph = [...document.querySelectorAll("p")].find((item) =>
+    item.textContent?.includes("SET key value NX EX/PX"),
+  )!;
+  const range = document.createRange();
+  range.selectNodeContents(paragraph);
+  const selected = window.getSelection()!;
+  selected.removeAllRanges();
+  selected.addRange(range);
+  await act(async () => {
+    paragraph.dispatchEvent(
+      new browser.MouseEvent("contextmenu", {
+        bubbles: true,
+        clientX: 240,
+        clientY: 320,
+      }),
+    );
+  });
+  await click("快捷答疑");
+  await act(async () => {
+    await Promise.resolve();
+  });
+  expect(calls[0]).toMatchObject({
+    selection: "使用 SET key value NX EX/PX 原子加锁",
+    intent: "explain",
+    question_id: "1",
+    revision: 0,
+  });
+  expect(document.body.textContent).toContain("NX 表示键不存在时才写入");
+  expect(document.body.textContent).toContain("不修改本题评分");
+  await click("参数区别");
+  await act(async () => {
+    await Promise.resolve();
+  });
+  expect(calls.at(-1)?.intent).toBe("compare");
+  expect(document.querySelector("table")?.textContent).toContain("PX");
+  expect(document.body.textContent).toContain("毫秒");
 });

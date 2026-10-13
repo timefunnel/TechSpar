@@ -4,7 +4,9 @@ import {
   actDrill,
   finishDrill,
   getDrillSession,
+  quickAnswerDrill,
   type DrillAction,
+  type DrillQuickAnswerInput,
   type DrillSession,
 } from "../api/drill";
 import { getAuthToken } from "../lib/authSession";
@@ -134,6 +136,9 @@ function LearningSession({ sessionId }: { sessionId: string }) {
           session={session}
           pending={pending || !!error}
           onAction={perform}
+          onQuickAnswer={(input: DrillQuickAnswerInput, signal: AbortSignal) =>
+            quickAnswerDrill(session.session_id, input, signal)
+          }
           onFinish={() => {
             void run().catch(() => {
               /* visible error */

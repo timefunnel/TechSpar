@@ -1,10 +1,11 @@
-import { useState } from "react";
+import { useEffect, useRef, useState, type MouseEvent } from "react";
 import ReactMarkdown from "react-markdown";
-import { Lightbulb, BookOpen, ArrowRight, RotateCcw } from "lucide-react";
+import { Lightbulb, BookOpen, ArrowRight, RotateCcw, MessageCircleQuestion } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
-import type { DrillAction, DrillSession } from "../../api/drill";
+import type { DrillAction, DrillQuickAnswer, DrillQuickAnswerInput, DrillSession } from "../../api/drill";
+import { QuickAnswerPanel } from "./QuickAnswerPanel";
 
 const kinds = {
   judgment: "判断纠错",
@@ -33,11 +34,16 @@ export function DrillWorkbench({
   session,
   pending,
   onAction,
+  onQuickAnswer,
   onFinish,
 }: {
   session: DrillSession;
   pending: boolean;
   onAction: (input: DrillAction) => Promise<boolean>;
+  onQuickAnswer: (
+    input: DrillQuickAnswerInput,
+    signal: AbortSignal,
+  ) => Promise<DrillQuickAnswer>;
   onFinish: () => void;
 }) {
   const [index, setIndex] = useState(0);
@@ -46,6 +52,41 @@ export function DrillWorkbench({
   const [reason, setReason] = useState<DrillAction["reason"]>(null);
   const [recalling, setRecalling] = useState(false);
   const [detail, setDetail] = useState(false);
+  const [quickMenu, setQuickMenu] = useState<{
+    text: string;
+    x: number;
+    y: number;
+  } | null>(null);
+  const [quickSelection, setQuickSelection] = useState("");
+  const [quickResult, setQuickResult] = useState<DrillQuickAnswer | null>(null);
+  const [quickRequest, setQuickRequest] = useState<{
+    intent: DrillQuickAnswerInput["intent"];
+    question?: string;
+  }>({ intent: "explain" });
+  const [quickPending, setQuickPending] = useState(false);
+  const [quickError, setQuickError] = useState("");
+  const quickController = useRef<AbortController | null>(null);
+  useEffect(() => () => quickController.current?.abort(), []);
+  useEffect(() => {
+    if (!quickMenu) return;
+    const dismiss = (event: Event) => {
+      const target = event.target;
+      if (target instanceof Element && target.closest("[data-quick-menu]"))
+        return;
+      setQuickMenu(null);
+    };
+    const escape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setQuickMenu(null);
+    };
+    document.addEventListener("pointerdown", dismiss);
+    document.addEventListener("scroll", dismiss, true);
+    document.addEventListener("keydown", escape);
+    return () => {
+      document.removeEventListener("pointerdown", dismiss);
+      document.removeEventListener("scroll", dismiss, true);
+      document.removeEventListener("keydown", escape);
+    };
+  }, [quickMenu]);
   const question = session.state.questions[index];
   if (!question) return null;
   const progress = session.state.progress[question.id]!;
@@ -60,12 +101,92 @@ export function DrillWorkbench({
       question_id: question.id,
     });
   const move = (next: number) => {
+    quickController.current?.abort();
+    setQuickMenu(null);
+    setQuickSelection("");
+    setQuickResult(null);
+    setQuickRequest({ intent: "explain" });
+    setQuickError("");
+    setQuickPending(false);
     setIndex(next);
     setAnswer("");
     setSelection("");
     setReason(null);
     setRecalling(false);
     setDetail(false);
+  };
+  const showQuickMenu = (event: MouseEvent<HTMLElement>) => {
+    const selected = window.getSelection();
+    const anchor = selected?.anchorNode;
+    const focus = selected?.focusNode;
+    const text = selected?.toString().trim() ?? "";
+    if (
+      !selected ||
+      selected.isCollapsed ||
+      !anchor ||
+      !focus ||
+      !event.currentTarget.contains(anchor) ||
+      !event.currentTarget.contains(focus) ||
+      text.length < 2
+    )
+      return;
+    event.preventDefault();
+    const width = window.innerWidth || event.clientX + 180;
+    const height = window.innerHeight || event.clientY + 52;
+    setQuickMenu({
+      text: text.slice(0, 500),
+      x: Math.max(8, Math.min(event.clientX, width - 164)),
+      y: Math.max(8, Math.min(event.clientY, height - 48)),
+    });
+  };
+  const askQuick = async (
+    selection: string,
+    intent: DrillQuickAnswerInput["intent"],
+    customQuestion?: string,
+  ) => {
+    quickController.current?.abort();
+    const controller = new AbortController();
+    quickController.current = controller;
+    setQuickRequest({
+      intent,
+      ...(customQuestion ? { question: customQuestion } : {}),
+    });
+    setQuickPending(true);
+    setQuickError("");
+    try {
+      const result = await onQuickAnswer(
+        {
+          revision: session.state.revision,
+          question_id: question.id,
+          selection,
+          intent,
+          ...(customQuestion ? { question: customQuestion } : {}),
+        },
+        controller.signal,
+      );
+      if (!controller.signal.aborted) setQuickResult(result);
+    } catch (error) {
+      if (!controller.signal.aborted)
+        setQuickError(error instanceof Error ? error.message : String(error));
+    } finally {
+      if (!controller.signal.aborted) setQuickPending(false);
+    }
+  };
+  const openQuick = (selection: string) => {
+    setQuickMenu(null);
+    setQuickSelection(selection);
+    setQuickResult(null);
+    setQuickRequest({ intent: "explain" });
+    setQuickError("");
+    void askQuick(selection, "explain");
+  };
+  const closeQuick = () => {
+    quickController.current?.abort();
+    setQuickSelection("");
+    setQuickResult(null);
+    setQuickRequest({ intent: "explain" });
+    setQuickError("");
+    setQuickPending(false);
   };
   const submit = async () => {
     const text = [recalling ? "" : selection, answer.trim()]
@@ -208,7 +329,7 @@ export function DrillWorkbench({
                   </section>
                 )}
                 {progress.explanation && (
-                  <section aria-label="学习讲解" className="space-y-2 text-sm">
+                  <section aria-label="学习讲解" onContextMenu={showQuickMenu} className="cursor-text space-y-2 text-sm">
                     <p className="font-medium">30 秒核心答法</p>
                     <ReactMarkdown>
                       {progress.explanation.short_answer}
@@ -223,12 +344,13 @@ export function DrillWorkbench({
                         </ReactMarkdown>
                       </div>
                     </details>
+                    <p className="text-xs text-dim">选中不懂的内容，右键可打开快捷答疑。</p>
                   </section>
                 )}
               </>
             )}
             {progress.attempt && !recalling && (
-              <section aria-label="即时反馈" className="space-y-3 text-sm">
+              <section aria-label="即时反馈" onContextMenu={showQuickMenu} className="cursor-text space-y-3 text-sm">
                 <div className="flex flex-wrap items-center gap-2">
                   <strong>
                     {question.resume_context?.stage === 'expression' ? '项目表达 · ' : '技术练习 · '}
@@ -306,6 +428,7 @@ export function DrillWorkbench({
                 <p className="text-xs text-dim">
                   练习分不是掌握度。项目表达不影响技术掌握度；看过提示、讲解、反馈或同日变式后答对，都不作为延迟独立掌握证据。
                 </p>
+                <p className="text-xs text-dim">选中讲解中的概念，右键可打开快捷答疑。</p>
               </section>
             )}
             {recalling && (
@@ -448,6 +571,38 @@ export function DrillWorkbench({
               : ""}
         </span>
       </div>
+      {quickMenu && (
+        <div
+          data-quick-menu
+          role="menu"
+          className="fixed z-[60] rounded-lg border border-border bg-card p-1 shadow-lg"
+          style={{ left: quickMenu.x, top: quickMenu.y }}
+        >
+          <button
+            type="button"
+            role="menuitem"
+            className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm hover:bg-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+            onClick={() => openQuick(quickMenu.text)}
+          >
+            <MessageCircleQuestion size={16} className="text-primary" />
+            快捷答疑
+          </button>
+        </div>
+      )}
+      {quickSelection && (
+        <QuickAnswerPanel
+          key={quickSelection}
+          selection={quickSelection}
+          result={quickResult}
+          request={quickRequest}
+          pending={quickPending}
+          error={quickError}
+          onAsk={(intent, customQuestion) =>
+            void askQuick(quickSelection, intent, customQuestion)
+          }
+          onClose={closeQuick}
+        />
+      )}
     </div>
   );
 }

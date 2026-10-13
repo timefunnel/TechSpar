@@ -663,6 +663,32 @@
   margin: 12px 0;
 }
 
+.quick-answer-content {
+  overflow-x: auto;
+}
+
+.quick-answer-content table {
+  width: 100%;
+  min-width: 320px;
+  border-collapse: collapse;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.quick-answer-content th,
+.quick-answer-content td {
+  border: 1px solid var(--border);
+  padding: 7px 9px;
+  text-align: left;
+  vertical-align: top;
+}
+
+.quick-answer-content th {
+  background: var(--hover);
+  color: var(--foreground);
+  font-weight: 600;
+}
+
 .glass-obsidian {
   background: rgba(15, 23, 42, 0.7);
   backdrop-filter: blur(20px) saturate(180%);

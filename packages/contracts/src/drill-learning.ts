@@ -51,6 +51,15 @@ export const DrillActionSchema = z.strictObject({
   action: z.enum(['hint', 'explain', 'answer', 'recall', 'variant']),
   answer: z.string().trim().min(1).max(12000).optional(), reason: z.enum(['forgot', 'unclear', 'expression']).nullable().optional(),
 }).refine(input => !['answer', 'recall'].includes(input.action) || !!input.answer || !!input.reason, { message: '请回答或选择不会的原因' })
+export const DrillQuickAnswerIntentSchema = z.enum(['explain', 'compare', 'current', 'interview', 'custom'])
+export const DrillQuickAnswerRequestSchema = z.strictObject({
+  revision: z.number().int().nonnegative(), question_id: z.string().min(1).max(200),
+  selection: z.string().trim().min(2).max(500), intent: DrillQuickAnswerIntentSchema,
+  question: z.string().trim().min(1).max(1000).optional(),
+}).refine(input => input.intent !== 'custom' || !!input.question, { message: '请输入追问内容' })
+export const DrillQuickAnswerResponseSchema = z.strictObject({
+  selection: z.string(), intent: DrillQuickAnswerIntentSchema, answer: z.string().min(1).max(12000),
+})
 export const DrillFinishSchema = z.strictObject({ revision: z.number().int().nonnegative() })
 export const DrillQueueSchema = z.strictObject({
   today: z.string(),
@@ -67,3 +76,5 @@ export type DrillSessionResponse = z.infer<typeof DrillSessionSchema>
 export type DrillQueueResponse = z.infer<typeof DrillQueueSchema>
 export type DrillActionRequest = z.infer<typeof DrillActionSchema>
 export type DrillStartRequest = z.infer<typeof DrillStartSchema>
+export type DrillQuickAnswerRequest = z.infer<typeof DrillQuickAnswerRequestSchema>
+export type DrillQuickAnswerResponse = z.infer<typeof DrillQuickAnswerResponseSchema>

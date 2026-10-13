@@ -3492,6 +3492,68 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/drill/session/{session_id}/quick-answer": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    session_id: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        revision: number;
+                        question_id: string;
+                        selection: string;
+                        /** @enum {string} */
+                        intent: "explain" | "compare" | "current" | "interview" | "custom";
+                        question?: string;
+                    };
+                };
+            };
+            responses: {
+                /** @description Context-bound learning answer without grading changes */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            selection: string;
+                            /** @enum {string} */
+                            intent: "explain" | "compare" | "current" | "interview" | "custom";
+                            answer: string;
+                        };
+                    };
+                };
+                /** @description Validation Error */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["HTTPValidationError"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/drill/session/{session_id}/finish": {
         parameters: {
             query?: never;
