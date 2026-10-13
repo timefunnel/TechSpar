@@ -1,4 +1,5 @@
 import type { RequestContext } from '../kernel/context.ts'
+import type { DrillProfileObservation } from '../interview/drill-model.ts'
 import { AppError, AuthenticationError } from '../kernel/errors.ts'
 import { parseJsonResponse } from '../kernel/json.ts'
 import { enumValue, finiteNumber, objectArray, record, requiredText, textValue, StructuredOutputError } from '../kernel/structured-output.ts'
@@ -323,7 +324,7 @@ function applyBehaviorOps(profile: CandidateProfile, rawOps: unknown[], sessionI
   }
 }
 
-function sessionScore(session: InterviewSession): { score?: number; coverage: number } {
+function sessionScore(session: Pick<InterviewSession, 'questions' | 'scores'>): { score?: number; coverage: number } {
   const values = session.scores.flatMap((raw) => {
     const score = number(raw.score); if (score === undefined) return []
     const difficulty = Math.max(1, number(raw.difficulty) || 1)
@@ -335,7 +336,7 @@ function sessionScore(session: InterviewSession): { score?: number; coverage: nu
   return { score: Math.round(values.reduce((sum, value) => sum + value.score * value.difficulty, 0) / weight * 100) / 10, coverage }
 }
 
-function updateMastery(profile: CandidateProfile, session: InterviewSession, extraction: Record<string, unknown>, now: string): void {
+function updateMastery(profile: CandidateProfile, session: Pick<InterviewSession, 'topic' | 'questions' | 'scores'>, extraction: Record<string, unknown>, now: string): void {
   if (!session.topic) return
   const rawMastery = object(extraction.topic_mastery)
   const mastery = Object.keys(object(rawMastery[session.topic])).length ? object(rawMastery[session.topic]) : rawMastery
@@ -490,11 +491,56 @@ export class ProfileService implements ProfileUseCases, CandidateProfilePort {
   async get(context: RequestContext): Promise<CandidateProfile> {
     const userId = id(context)
     const profile = await this.profile(userId)
-    const { _pending_memory: _, ...publicProfile } = profile
+    const { _pending_memory: _, _drill_applied_attempts: __, ...publicProfile } = profile
     return { ...publicProfile, due_reviews: (await this.dueReviews(context)).map((point) => ({ point: point.point, topic: point.topic, next_review: object(point.sr).next_review })) }
   }
 
   async targetRole(userId: string): Promise<string> { return (await this.profile(userId)).target_role || '' }
+
+  async recordDrillAttempt(context: RequestContext, observation: DrillProfileObservation): Promise<void> {
+    const userId = id(context)
+    const { attempt, question, topic, session_id: sessionId } = observation
+    if (Object.hasOwn(object((await this.profile(userId))._drill_applied_attempts), attempt.id)) return
+    await this.deps.repository.update(userId, profile => {
+      prepare(profile)
+      const applied = object(profile._drill_applied_attempts)
+      if (Object.hasOwn(applied, attempt.id)) return
+      let point = profile.weak_points.find(item => item.topic === topic && item.point === question.review_point && item.source !== 'consolidated' && item.axis !== 'performance')
+      if (!point) {
+        point = { point: question.review_point, topic, source: 'observed', first_seen: attempt.at, times_seen: 0, improved: false }
+        profile.weak_points.push(point)
+      }
+      const productive = question.kind === 'code' || question.kind === 'scenario'
+      const qualifies = attempt.outcome === 'independent_correct' && productive
+      const entries = history(point)
+      const previous = [...entries].filter(item => item.event === 'drill_reviewed').sort((a, b) => String(b.date).localeCompare(String(a.date)))[0]
+      if (previous && String(previous.date) > attempt.at) {
+        entries.push({ date: attempt.at, event: 'drill_reviewed', score: attempt.feedback.score, assistance: attempt.assistance, outcome: attempt.outcome, qualifies, affects_schedule: false, session_id: sessionId, question_id: question.id })
+        applied[attempt.id] = true; profile._drill_applied_attempts = applied
+        return
+      }
+      // Assisted/recognition practice is useful, but does not lengthen the independent recall schedule.
+      const sameDay = previous && String(previous.date).slice(0, 10) === attempt.at.slice(0, 10)
+      const effectiveScore = qualifies && !sameDay ? attempt.feedback.score : Math.min(attempt.feedback.score, 4)
+      point.sr = sm2Update(object(point.sr), effectiveScore, new Date(attempt.at))
+      point.archived = false; delete point.archived_at; delete point.archived_reason
+      point.last_seen = attempt.at; point.times_seen = Number(point.times_seen || 0) + 1
+      point.drill_source = { session_id: sessionId, question_id: question.id }
+      const previousDate = typeof previous?.date === 'string' ? previous.date.slice(0, 10) : ''
+      const delayed = !!previousDate && previousDate < attempt.at.slice(0, 10)
+      const previousQualified = previous?.qualifies === true
+      point.improved = qualifies && delayed && previousQualified
+      entries.push({ date: attempt.at, event: 'drill_reviewed', score: attempt.feedback.score, effective_score: effectiveScore, assistance: attempt.assistance, outcome: attempt.outcome, qualifies, affects_schedule: true, session_id: sessionId, question_id: question.id })
+      if (point.improved) point.improved_at = attempt.at
+      else delete point.improved_at
+      if (attempt.assistance === 'independent' && productive) {
+        updateMastery(profile, { topic, questions: [question], scores: [{ question_id: question.id, score: attempt.feedback.score, difficulty: question.difficulty }] }, {}, attempt.at)
+      }
+      applied[attempt.id] = true
+      profile._drill_applied_attempts = applied
+      profile.updated_at = attempt.at
+    })
+  }
   async updateTargetRole(userId: string, role: string): Promise<void> {
     const value = role.trim(); if (!value) return
     await this.deps.repository.update(userId, (profile) => { profile.target_role = value })
@@ -528,7 +574,7 @@ export class ProfileService implements ProfileUseCases, CandidateProfilePort {
       const mastery = profile.topic_mastery[topic]
       if (mastery) parts.push(`${topic} 掌握度：${mastery.score ?? Number(mastery.level || 0) * 20}/100 — ${mastery.notes || ''}`)
       const today = new Date().toISOString().slice(0, 10)
-      const due = profile.weak_points.filter((point) => point.topic === topic && point.source !== 'consolidated' && !point.improved && !point.archived && point.axis !== 'performance' && String(object(point.sr).next_review || '2000-01-01') <= today).sort((left, right) => Number(object(left.sr).ease_factor || 2.5) - Number(object(right.sr).ease_factor || 2.5)).slice(0, 5)
+      const due = profile.weak_points.filter((point) => point.topic === topic && point.source !== 'consolidated' && (!point.improved || !!point.drill_source) && !point.archived && point.axis !== 'performance' && String(object(point.sr).next_review || '2000-01-01') <= today).sort((left, right) => Number(object(left.sr).ease_factor || 2.5) - Number(object(right.sr).ease_factor || 2.5)).slice(0, 5)
       if (due.length) parts.push(`本轮到期复习：${due.map((point) => point.point).join('、')}`)
       const query = [
         `检索有助于本轮专项训练的历史表现。训练主题：${topic}`,
@@ -580,7 +626,7 @@ export class ProfileService implements ProfileUseCases, CandidateProfilePort {
 
   async dueReviews(context: RequestContext, topic?: string): Promise<WeakPoint[]> {
     const today = new Date().toISOString().slice(0, 10)
-    return (await this.profile(id(context))).weak_points.filter((point) => !point.improved && !point.archived && point.source !== 'consolidated' && point.axis !== 'performance' && (!topic || point.topic === topic) && String(object(point.sr).next_review || '2000-01-01') <= today).sort((a, b) => Number(object(a.sr).ease_factor || 2.5) - Number(object(b.sr).ease_factor || 2.5))
+    return (await this.profile(id(context))).weak_points.filter((point) => (!point.improved || !!point.drill_source) && !point.archived && point.source !== 'consolidated' && point.axis !== 'performance' && (!topic || point.topic === topic) && String(object(point.sr).next_review || '2000-01-01') <= today).sort((a, b) => Number(object(a.sr).ease_factor || 2.5) - Number(object(b.sr).ease_factor || 2.5))
   }
 
   async topicHistory(context: RequestContext, topic: string) { return this.deps.sessions.reviewedByTopic(id(context), topic) }

@@ -1,6 +1,7 @@
 import { Database } from 'bun:sqlite'
 import type {
   InterviewAnswer,
+  DrillState,
   InterviewMode,
   InterviewQuestion,
   InterviewSession,
@@ -170,6 +171,36 @@ export class BunInterviewSessionRepository implements InterviewSessionRepository
   async get(sessionId: string, userId: string): Promise<InterviewSession | undefined> {
     const row = this.sqlite.query<SessionRow, { $id: string; $userId: string }>('SELECT * FROM sessions WHERE session_id = $id AND user_id = $userId').get({ $id: sessionId, $userId: userId })
     return row ? asSession(row) : undefined
+  }
+
+  async drillSessions(userId: string, topic?: string): Promise<InterviewSession[]> {
+    return this.sqlite.query<SessionRow, { $user: string; $topic: string | null }>(
+      "SELECT * FROM sessions WHERE user_id = $user AND mode = 'topic_drill' AND ($topic IS NULL OR topic = $topic) ORDER BY created_at DESC, rowid DESC",
+    ).all({ $user: userId, $topic: topic ?? null }).map(asSession)
+  }
+
+  async saveDrillState(input: { sessionId: string; userId: string; expectedRevision: number; state: DrillState; finished?: { review: string; scores: Array<Record<string, unknown>>; overall: Record<string, unknown>; transcript: import('@techspar/core').InterviewMessage[] } }): Promise<boolean> {
+    return this.sqlite.transaction(() => {
+      const row = this.sqlite.query<SessionRow, [string, string]>('SELECT * FROM sessions WHERE session_id = ? AND user_id = ?').get(input.sessionId, input.userId)
+      if (!row || row.mode !== 'topic_drill' || row.status !== 'ongoing') return false
+      const meta = json<Record<string, unknown>>(row.meta, {})
+      const state = meta.drill_learning as DrillState | undefined
+      if (state?.version !== 1 || state.revision !== input.expectedRevision || input.state.revision !== input.expectedRevision + 1) return false
+      meta.drill_learning = input.state
+      const final = input.finished
+      // Compatibility projection for the existing history screen. Learning
+      // state remains canonical and this projection is written atomically.
+      const transcript = input.state.questions.flatMap(question => {
+        const attempt = input.state.progress[question.id]?.attempt
+        return attempt ? [{ role: 'assistant', content: question.question, time: attempt.at }, { role: 'user', content: attempt.answer, time: attempt.at }] : []
+      })
+      this.sqlite.query(`UPDATE sessions SET meta = ?, questions = ?, transcript = ?, scores = ?, overall = ?, review = ?, status = ?, updated_at = CURRENT_TIMESTAMP WHERE session_id = ? AND user_id = ?`).run(
+        JSON.stringify(meta), JSON.stringify(input.state.questions), JSON.stringify(final ? final.transcript : transcript),
+        final ? JSON.stringify(final.scores) : row.scores, final ? JSON.stringify(final.overall) : row.overall,
+        final ? final.review : row.review, final ? 'reviewed' : 'ongoing', input.sessionId, input.userId,
+      )
+      return true
+    }).immediate()
   }
 
   async appendMessage(sessionId: string, userId: string, role: 'user' | 'assistant', content: string): Promise<boolean> {

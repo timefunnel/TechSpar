@@ -378,6 +378,7 @@ export class InterviewService implements InterviewUseCases {
     const session = await this.deps.sessions.get(sessionId, id)
     if (!session) throw new AppError('Session not found.', 404)
     if (session.status === 'prepared') throw new AppError('请先开始训练。', 409)
+    if (session.meta.drill_learning) throw new AppError('带教训练请使用带教页面结束并查看回顾。', 409)
     if (session.status === 'reviewed') return { session_id: sessionId, mode: session.mode, status: 'done' }
     if (session.status === 'reviewing') return { session_id: sessionId, mode: session.mode, status: 'pending' }
     const batchMode = session.mode === 'topic_drill' || session.mode === 'jd_prep'
@@ -391,6 +392,7 @@ export class InterviewService implements InterviewUseCases {
     const session = await this.deps.sessions.get(sessionId, id)
     if (!session) throw new AppError('Session not found.', 404)
     if (session.mode !== 'topic_drill' && session.mode !== 'jd_prep') throw new AppError('Only batch-mode sessions support drafts.', 400)
+    if (session.meta.drill_learning) throw new AppError('带教训练的回答只能通过逐题评估保存。', 409)
     if (session.status !== 'ongoing') return { session_id: sessionId, status: session.status, saved: false }
     await this.deps.sessions.saveAnswers(sessionId, id, answers)
     return { session_id: sessionId, status: 'ongoing', saved: true }
@@ -400,6 +402,7 @@ export class InterviewService implements InterviewUseCases {
     const id = userId(context)
     const session = await this.deps.sessions.get(sessionId, id)
     if (!session) throw new AppError('Session not found.', 404)
+    if (session.meta.drill_learning) throw new AppError('带教训练不支持重新生成考核评分，请打开带教回顾。', 409)
     if (session.status === 'reviewed' && !session.meta.profile_extract_failed) return { session_id: sessionId, mode: session.mode, status: 'done' }
     if (session.status === 'reviewing') return { session_id: sessionId, mode: session.mode, status: 'pending' }
     if (session.status === 'ongoing') throw new AppError('面试尚未结束，请先结束面试再生成复盘。', 400)
@@ -466,6 +469,7 @@ export class InterviewService implements InterviewUseCases {
     const id = userId(context)
     const session = await this.deps.sessions.get(sessionId, id)
     if (!session) throw new AppError('Session not found.', 404)
+    if (session.meta.drill_learning) throw new AppError('请在带教页面查看讲解，系统会记录辅助使用情况。', 409)
     const key = String(questionId)
     if (session.reference_answers[key]) return { reference_answer: session.reference_answers[key], cached: true }
     const question = session.questions.find((item) => String(item.id) === key)

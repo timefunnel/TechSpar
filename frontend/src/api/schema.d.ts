@@ -2595,6 +2595,570 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/drill/queue": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: {
+                    topic?: string;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Wrong answers and canonical profile review schedule */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            today: string;
+                            items: {
+                                point: string;
+                                topic: string;
+                                question: string | null;
+                                answer: string | null;
+                                assessment: string | null;
+                                session_id: string | null;
+                                question_id: string | null;
+                                next_review: string | null;
+                                due: boolean;
+                                improved: boolean;
+                                /** @enum {string} */
+                                evidence: "historical_unknown" | "independent_correct" | "assisted_correct" | "needs_review" | "weak_point";
+                            }[];
+                            active_sessions: {
+                                session_id: string;
+                                topic: string;
+                                answered: number;
+                                total: number;
+                            }[];
+                        };
+                    };
+                };
+                /** @description Validation Error */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["HTTPValidationError"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/drill/start": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        topic: string;
+                        /**
+                         * @default new
+                         * @enum {string}
+                         */
+                        source?: "new" | "due" | "mistakes";
+                        points?: string[];
+                    };
+                };
+            };
+            responses: {
+                /** @description Server-owned guided learning state */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            session_id: string;
+                            topic: string;
+                            /** @enum {string} */
+                            status: "ongoing" | "reviewed";
+                            state: {
+                                /** @enum {number} */
+                                version: 1;
+                                revision: number;
+                                /** @enum {string} */
+                                source: "new" | "due" | "mistakes";
+                                questions: {
+                                    id: string;
+                                    question: string;
+                                    focus_area: string;
+                                    difficulty: number;
+                                    /** @enum {string} */
+                                    kind: "judgment" | "choice" | "code" | "scenario";
+                                    options: string[];
+                                    review_point: string;
+                                    primed: boolean;
+                                }[];
+                                progress: {
+                                    [key: string]: {
+                                        exposure_at?: string;
+                                        hints: string[];
+                                        explanation?: {
+                                            short_answer: string;
+                                            detailed_answer: string;
+                                        };
+                                        attempt?: {
+                                            id: string;
+                                            answer: string;
+                                            /** @enum {string|null} */
+                                            reason: "forgot" | "unclear" | "expression" | null;
+                                            at: string;
+                                            /** @enum {string} */
+                                            assistance: "independent" | "hinted" | "explained" | "after_feedback";
+                                            /** @enum {string} */
+                                            outcome: "independent_correct" | "assisted_correct" | "needs_review";
+                                            feedback: {
+                                                score: number;
+                                                correct_points: string[];
+                                                missing_points: string[];
+                                                misconceptions: string[];
+                                                short_answer: string;
+                                                detailed_answer: string;
+                                            };
+                                        };
+                                        recall?: {
+                                            id: string;
+                                            answer: string;
+                                            /** @enum {string|null} */
+                                            reason: "forgot" | "unclear" | "expression" | null;
+                                            at: string;
+                                            /** @enum {string} */
+                                            assistance: "independent" | "hinted" | "explained" | "after_feedback";
+                                            /** @enum {string} */
+                                            outcome: "independent_correct" | "assisted_correct" | "needs_review";
+                                            feedback: {
+                                                score: number;
+                                                correct_points: string[];
+                                                missing_points: string[];
+                                                misconceptions: string[];
+                                                short_answer: string;
+                                                detailed_answer: string;
+                                            };
+                                        };
+                                    };
+                                };
+                            };
+                        };
+                    };
+                };
+                /** @description Validation Error */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["HTTPValidationError"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/drill/session/{session_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    session_id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Server-owned guided learning state */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            session_id: string;
+                            topic: string;
+                            /** @enum {string} */
+                            status: "ongoing" | "reviewed";
+                            state: {
+                                /** @enum {number} */
+                                version: 1;
+                                revision: number;
+                                /** @enum {string} */
+                                source: "new" | "due" | "mistakes";
+                                questions: {
+                                    id: string;
+                                    question: string;
+                                    focus_area: string;
+                                    difficulty: number;
+                                    /** @enum {string} */
+                                    kind: "judgment" | "choice" | "code" | "scenario";
+                                    options: string[];
+                                    review_point: string;
+                                    primed: boolean;
+                                }[];
+                                progress: {
+                                    [key: string]: {
+                                        exposure_at?: string;
+                                        hints: string[];
+                                        explanation?: {
+                                            short_answer: string;
+                                            detailed_answer: string;
+                                        };
+                                        attempt?: {
+                                            id: string;
+                                            answer: string;
+                                            /** @enum {string|null} */
+                                            reason: "forgot" | "unclear" | "expression" | null;
+                                            at: string;
+                                            /** @enum {string} */
+                                            assistance: "independent" | "hinted" | "explained" | "after_feedback";
+                                            /** @enum {string} */
+                                            outcome: "independent_correct" | "assisted_correct" | "needs_review";
+                                            feedback: {
+                                                score: number;
+                                                correct_points: string[];
+                                                missing_points: string[];
+                                                misconceptions: string[];
+                                                short_answer: string;
+                                                detailed_answer: string;
+                                            };
+                                        };
+                                        recall?: {
+                                            id: string;
+                                            answer: string;
+                                            /** @enum {string|null} */
+                                            reason: "forgot" | "unclear" | "expression" | null;
+                                            at: string;
+                                            /** @enum {string} */
+                                            assistance: "independent" | "hinted" | "explained" | "after_feedback";
+                                            /** @enum {string} */
+                                            outcome: "independent_correct" | "assisted_correct" | "needs_review";
+                                            feedback: {
+                                                score: number;
+                                                correct_points: string[];
+                                                missing_points: string[];
+                                                misconceptions: string[];
+                                                short_answer: string;
+                                                detailed_answer: string;
+                                            };
+                                        };
+                                    };
+                                };
+                            };
+                        };
+                    };
+                };
+                /** @description Validation Error */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["HTTPValidationError"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/drill/session/{session_id}/action": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    session_id: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        revision: number;
+                        question_id: string;
+                        /** @enum {string} */
+                        action: "hint" | "explain" | "answer" | "recall" | "variant";
+                        answer?: string;
+                        /** @enum {string|null} */
+                        reason?: "forgot" | "unclear" | "expression" | null;
+                    };
+                };
+            };
+            responses: {
+                /** @description Server-owned guided learning state */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            session_id: string;
+                            topic: string;
+                            /** @enum {string} */
+                            status: "ongoing" | "reviewed";
+                            state: {
+                                /** @enum {number} */
+                                version: 1;
+                                revision: number;
+                                /** @enum {string} */
+                                source: "new" | "due" | "mistakes";
+                                questions: {
+                                    id: string;
+                                    question: string;
+                                    focus_area: string;
+                                    difficulty: number;
+                                    /** @enum {string} */
+                                    kind: "judgment" | "choice" | "code" | "scenario";
+                                    options: string[];
+                                    review_point: string;
+                                    primed: boolean;
+                                }[];
+                                progress: {
+                                    [key: string]: {
+                                        exposure_at?: string;
+                                        hints: string[];
+                                        explanation?: {
+                                            short_answer: string;
+                                            detailed_answer: string;
+                                        };
+                                        attempt?: {
+                                            id: string;
+                                            answer: string;
+                                            /** @enum {string|null} */
+                                            reason: "forgot" | "unclear" | "expression" | null;
+                                            at: string;
+                                            /** @enum {string} */
+                                            assistance: "independent" | "hinted" | "explained" | "after_feedback";
+                                            /** @enum {string} */
+                                            outcome: "independent_correct" | "assisted_correct" | "needs_review";
+                                            feedback: {
+                                                score: number;
+                                                correct_points: string[];
+                                                missing_points: string[];
+                                                misconceptions: string[];
+                                                short_answer: string;
+                                                detailed_answer: string;
+                                            };
+                                        };
+                                        recall?: {
+                                            id: string;
+                                            answer: string;
+                                            /** @enum {string|null} */
+                                            reason: "forgot" | "unclear" | "expression" | null;
+                                            at: string;
+                                            /** @enum {string} */
+                                            assistance: "independent" | "hinted" | "explained" | "after_feedback";
+                                            /** @enum {string} */
+                                            outcome: "independent_correct" | "assisted_correct" | "needs_review";
+                                            feedback: {
+                                                score: number;
+                                                correct_points: string[];
+                                                missing_points: string[];
+                                                misconceptions: string[];
+                                                short_answer: string;
+                                                detailed_answer: string;
+                                            };
+                                        };
+                                    };
+                                };
+                            };
+                        };
+                    };
+                };
+                /** @description Validation Error */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["HTTPValidationError"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/drill/session/{session_id}/finish": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    session_id: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        revision: number;
+                    };
+                };
+            };
+            responses: {
+                /** @description Server-owned guided learning state */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            session_id: string;
+                            topic: string;
+                            /** @enum {string} */
+                            status: "ongoing" | "reviewed";
+                            state: {
+                                /** @enum {number} */
+                                version: 1;
+                                revision: number;
+                                /** @enum {string} */
+                                source: "new" | "due" | "mistakes";
+                                questions: {
+                                    id: string;
+                                    question: string;
+                                    focus_area: string;
+                                    difficulty: number;
+                                    /** @enum {string} */
+                                    kind: "judgment" | "choice" | "code" | "scenario";
+                                    options: string[];
+                                    review_point: string;
+                                    primed: boolean;
+                                }[];
+                                progress: {
+                                    [key: string]: {
+                                        exposure_at?: string;
+                                        hints: string[];
+                                        explanation?: {
+                                            short_answer: string;
+                                            detailed_answer: string;
+                                        };
+                                        attempt?: {
+                                            id: string;
+                                            answer: string;
+                                            /** @enum {string|null} */
+                                            reason: "forgot" | "unclear" | "expression" | null;
+                                            at: string;
+                                            /** @enum {string} */
+                                            assistance: "independent" | "hinted" | "explained" | "after_feedback";
+                                            /** @enum {string} */
+                                            outcome: "independent_correct" | "assisted_correct" | "needs_review";
+                                            feedback: {
+                                                score: number;
+                                                correct_points: string[];
+                                                missing_points: string[];
+                                                misconceptions: string[];
+                                                short_answer: string;
+                                                detailed_answer: string;
+                                            };
+                                        };
+                                        recall?: {
+                                            id: string;
+                                            answer: string;
+                                            /** @enum {string|null} */
+                                            reason: "forgot" | "unclear" | "expression" | null;
+                                            at: string;
+                                            /** @enum {string} */
+                                            assistance: "independent" | "hinted" | "explained" | "after_feedback";
+                                            /** @enum {string} */
+                                            outcome: "independent_correct" | "assisted_correct" | "needs_review";
+                                            feedback: {
+                                                score: number;
+                                                correct_points: string[];
+                                                missing_points: string[];
+                                                misconceptions: string[];
+                                                short_answer: string;
+                                                detailed_answer: string;
+                                            };
+                                        };
+                                    };
+                                };
+                            };
+                        };
+                    };
+                };
+                /** @description Validation Error */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["HTTPValidationError"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/profile": {
         parameters: {
             query?: never;

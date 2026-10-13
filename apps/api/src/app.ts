@@ -9,6 +9,7 @@ import {
   type AuthUseCases,
   type KnowledgeUseCases,
   type InterviewUseCases,
+  type DrillUseCases,
   type QuotaUseCases,
   type ResumeUseCases,
   type ProfileUseCases,
@@ -27,6 +28,7 @@ import { registerSettingsRoutes } from './routes/settings.ts'
 import { registerKnowledgeRoutes } from './routes/knowledge.ts'
 import { registerResumeRoutes } from './routes/resume.ts'
 import { registerInterviewRoutes } from './routes/interview.ts'
+import { registerDrillRoutes } from './routes/drill.ts'
 import { registerProfileRoutes } from './routes/profile.ts'
 import { registerPersonalAgentRoutes } from './routes/personal-agent.ts'
 import { registerDataMigrationRoutes } from './routes/data-migration.ts'
@@ -47,6 +49,7 @@ export type AppDependencies = {
   knowledge: KnowledgeUseCases
   resume: ResumeUseCases
   interview?: InterviewUseCases
+  drill?: DrillUseCases
   profile?: ProfileUseCases
   personalAgent?: PersonalAgentUseCases
   migration?: DataMigrationUseCases
@@ -88,6 +91,7 @@ export function createApp(deps: AppDependencies): OpenAPIHono {
   registerKnowledgeRoutes(app, deps)
   registerResumeRoutes(app, deps)
   if (deps.interview) registerInterviewRoutes(app, { interview: deps.interview, tokens: deps.tokens })
+  if (deps.drill) registerDrillRoutes(app, { drill: deps.drill, tokens: deps.tokens })
   if (deps.profile) registerProfileRoutes(app, { profile: deps.profile, tokens: deps.tokens })
   if (deps.personalAgent) registerPersonalAgentRoutes(app, { personalAgent: deps.personalAgent, tokens: deps.tokens })
   if (deps.migration) registerDataMigrationRoutes(app, { migration: deps.migration, tokens: deps.tokens })

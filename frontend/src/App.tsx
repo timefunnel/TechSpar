@@ -18,6 +18,7 @@ import Graph from "./pages/Graph";
 import RecordingAnalysis from "./pages/RecordingAnalysis";
 import Copilot from "./pages/Copilot";
 import TopicDrill from "./pages/TopicDrill";
+import DrillLearning from "./pages/DrillLearning";
 import MockInterview from "./pages/MockInterview";
 import Settings from "./pages/Settings";
 import Onboarding from "./pages/Onboarding";
@@ -96,6 +97,7 @@ function AppRoutes() {
                 />
                 <Route path="/copilot" element={<Copilot />} />
                 <Route path="/topic-drill" element={<TopicDrill />} />
+                <Route path="/topic-drill/learn/:sessionId" element={<DrillLearning />} />
                 <Route
                   path="/resume-interview"
                   element={<Navigate to="/mock-interview?mode=live" replace />}

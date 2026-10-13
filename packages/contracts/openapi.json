@@ -6176,6 +6176,1743 @@
         ]
       }
     },
+    "/api/drill/queue": {
+      "get": {
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            },
+            "required": false,
+            "name": "topic",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Wrong answers and canonical profile review schedule",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "today": {
+                      "type": "string"
+                    },
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "point": {
+                            "type": "string"
+                          },
+                          "topic": {
+                            "type": "string"
+                          },
+                          "question": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "answer": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "assessment": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "session_id": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "question_id": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "next_review": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "due": {
+                            "type": "boolean"
+                          },
+                          "improved": {
+                            "type": "boolean"
+                          },
+                          "evidence": {
+                            "type": "string",
+                            "enum": [
+                              "historical_unknown",
+                              "independent_correct",
+                              "assisted_correct",
+                              "needs_review",
+                              "weak_point"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "point",
+                          "topic",
+                          "question",
+                          "answer",
+                          "assessment",
+                          "session_id",
+                          "question_id",
+                          "next_review",
+                          "due",
+                          "improved",
+                          "evidence"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "active_sessions": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "session_id": {
+                            "type": "string"
+                          },
+                          "topic": {
+                            "type": "string"
+                          },
+                          "answered": {
+                            "type": "number"
+                          },
+                          "total": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "session_id",
+                          "topic",
+                          "answered",
+                          "total"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "today",
+                    "items",
+                    "active_sessions"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/drill/start": {
+      "post": {
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "topic": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200
+                  },
+                  "source": {
+                    "type": "string",
+                    "enum": [
+                      "new",
+                      "due",
+                      "mistakes"
+                    ],
+                    "default": "new"
+                  },
+                  "points": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 4000
+                    },
+                    "minItems": 1,
+                    "maxItems": 4
+                  }
+                },
+                "required": [
+                  "topic"
+                ],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Server-owned guided learning state",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "session_id": {
+                      "type": "string"
+                    },
+                    "topic": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "ongoing",
+                        "reviewed"
+                      ]
+                    },
+                    "state": {
+                      "type": "object",
+                      "properties": {
+                        "version": {
+                          "type": "number",
+                          "enum": [
+                            1
+                          ]
+                        },
+                        "revision": {
+                          "type": "integer",
+                          "minimum": 0
+                        },
+                        "source": {
+                          "type": "string",
+                          "enum": [
+                            "new",
+                            "due",
+                            "mistakes"
+                          ]
+                        },
+                        "questions": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string"
+                              },
+                              "question": {
+                                "type": "string"
+                              },
+                              "focus_area": {
+                                "type": "string"
+                              },
+                              "difficulty": {
+                                "type": "number"
+                              },
+                              "kind": {
+                                "type": "string",
+                                "enum": [
+                                  "judgment",
+                                  "choice",
+                                  "code",
+                                  "scenario"
+                                ]
+                              },
+                              "options": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string"
+                                }
+                              },
+                              "review_point": {
+                                "type": "string"
+                              },
+                              "primed": {
+                                "type": "boolean"
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "question",
+                              "focus_area",
+                              "difficulty",
+                              "kind",
+                              "options",
+                              "review_point",
+                              "primed"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "progress": {
+                          "type": "object",
+                          "additionalProperties": {
+                            "type": "object",
+                            "properties": {
+                              "exposure_at": {
+                                "type": "string"
+                              },
+                              "hints": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string"
+                                }
+                              },
+                              "explanation": {
+                                "type": "object",
+                                "properties": {
+                                  "short_answer": {
+                                    "type": "string"
+                                  },
+                                  "detailed_answer": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "short_answer",
+                                  "detailed_answer"
+                                ],
+                                "additionalProperties": false
+                              },
+                              "attempt": {
+                                "type": "object",
+                                "properties": {
+                                  "id": {
+                                    "type": "string"
+                                  },
+                                  "answer": {
+                                    "type": "string"
+                                  },
+                                  "reason": {
+                                    "type": "string",
+                                    "nullable": true,
+                                    "enum": [
+                                      "forgot",
+                                      "unclear",
+                                      "expression",
+                                      null
+                                    ]
+                                  },
+                                  "at": {
+                                    "type": "string"
+                                  },
+                                  "assistance": {
+                                    "type": "string",
+                                    "enum": [
+                                      "independent",
+                                      "hinted",
+                                      "explained",
+                                      "after_feedback"
+                                    ]
+                                  },
+                                  "outcome": {
+                                    "type": "string",
+                                    "enum": [
+                                      "independent_correct",
+                                      "assisted_correct",
+                                      "needs_review"
+                                    ]
+                                  },
+                                  "feedback": {
+                                    "type": "object",
+                                    "properties": {
+                                      "score": {
+                                        "type": "number",
+                                        "minimum": 0,
+                                        "maximum": 10
+                                      },
+                                      "correct_points": {
+                                        "type": "array",
+                                        "items": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "missing_points": {
+                                        "type": "array",
+                                        "items": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "misconceptions": {
+                                        "type": "array",
+                                        "items": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "short_answer": {
+                                        "type": "string"
+                                      },
+                                      "detailed_answer": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "score",
+                                      "correct_points",
+                                      "missing_points",
+                                      "misconceptions",
+                                      "short_answer",
+                                      "detailed_answer"
+                                    ],
+                                    "additionalProperties": false
+                                  }
+                                },
+                                "required": [
+                                  "id",
+                                  "answer",
+                                  "reason",
+                                  "at",
+                                  "assistance",
+                                  "outcome",
+                                  "feedback"
+                                ],
+                                "additionalProperties": false
+                              },
+                              "recall": {
+                                "type": "object",
+                                "properties": {
+                                  "id": {
+                                    "type": "string"
+                                  },
+                                  "answer": {
+                                    "type": "string"
+                                  },
+                                  "reason": {
+                                    "type": "string",
+                                    "nullable": true,
+                                    "enum": [
+                                      "forgot",
+                                      "unclear",
+                                      "expression",
+                                      null
+                                    ]
+                                  },
+                                  "at": {
+                                    "type": "string"
+                                  },
+                                  "assistance": {
+                                    "type": "string",
+                                    "enum": [
+                                      "independent",
+                                      "hinted",
+                                      "explained",
+                                      "after_feedback"
+                                    ]
+                                  },
+                                  "outcome": {
+                                    "type": "string",
+                                    "enum": [
+                                      "independent_correct",
+                                      "assisted_correct",
+                                      "needs_review"
+                                    ]
+                                  },
+                                  "feedback": {
+                                    "type": "object",
+                                    "properties": {
+                                      "score": {
+                                        "type": "number",
+                                        "minimum": 0,
+                                        "maximum": 10
+                                      },
+                                      "correct_points": {
+                                        "type": "array",
+                                        "items": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "missing_points": {
+                                        "type": "array",
+                                        "items": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "misconceptions": {
+                                        "type": "array",
+                                        "items": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "short_answer": {
+                                        "type": "string"
+                                      },
+                                      "detailed_answer": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "score",
+                                      "correct_points",
+                                      "missing_points",
+                                      "misconceptions",
+                                      "short_answer",
+                                      "detailed_answer"
+                                    ],
+                                    "additionalProperties": false
+                                  }
+                                },
+                                "required": [
+                                  "id",
+                                  "answer",
+                                  "reason",
+                                  "at",
+                                  "assistance",
+                                  "outcome",
+                                  "feedback"
+                                ],
+                                "additionalProperties": false
+                              }
+                            },
+                            "required": [
+                              "hints"
+                            ],
+                            "additionalProperties": false
+                          }
+                        }
+                      },
+                      "required": [
+                        "version",
+                        "revision",
+                        "source",
+                        "questions",
+                        "progress"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "session_id",
+                    "topic",
+                    "status",
+                    "state"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/drill/session/{session_id}": {
+      "get": {
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "required": true,
+            "name": "session_id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Server-owned guided learning state",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "session_id": {
+                      "type": "string"
+                    },
+                    "topic": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "ongoing",
+                        "reviewed"
+                      ]
+                    },
+                    "state": {
+                      "type": "object",
+                      "properties": {
+                        "version": {
+                          "type": "number",
+                          "enum": [
+                            1
+                          ]
+                        },
+                        "revision": {
+                          "type": "integer",
+                          "minimum": 0
+                        },
+                        "source": {
+                          "type": "string",
+                          "enum": [
+                            "new",
+                            "due",
+                            "mistakes"
+                          ]
+                        },
+                        "questions": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string"
+                              },
+                              "question": {
+                                "type": "string"
+                              },
+                              "focus_area": {
+                                "type": "string"
+                              },
+                              "difficulty": {
+                                "type": "number"
+                              },
+                              "kind": {
+                                "type": "string",
+                                "enum": [
+                                  "judgment",
+                                  "choice",
+                                  "code",
+                                  "scenario"
+                                ]
+                              },
+                              "options": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string"
+                                }
+                              },
+                              "review_point": {
+                                "type": "string"
+                              },
+                              "primed": {
+                                "type": "boolean"
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "question",
+                              "focus_area",
+                              "difficulty",
+                              "kind",
+                              "options",
+                              "review_point",
+                              "primed"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "progress": {
+                          "type": "object",
+                          "additionalProperties": {
+                            "type": "object",
+                            "properties": {
+                              "exposure_at": {
+                                "type": "string"
+                              },
+                              "hints": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string"
+                                }
+                              },
+                              "explanation": {
+                                "type": "object",
+                                "properties": {
+                                  "short_answer": {
+                                    "type": "string"
+                                  },
+                                  "detailed_answer": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "short_answer",
+                                  "detailed_answer"
+                                ],
+                                "additionalProperties": false
+                              },
+                              "attempt": {
+                                "type": "object",
+                                "properties": {
+                                  "id": {
+                                    "type": "string"
+                                  },
+                                  "answer": {
+                                    "type": "string"
+                                  },
+                                  "reason": {
+                                    "type": "string",
+                                    "nullable": true,
+                                    "enum": [
+                                      "forgot",
+                                      "unclear",
+                                      "expression",
+                                      null
+                                    ]
+                                  },
+                                  "at": {
+                                    "type": "string"
+                                  },
+                                  "assistance": {
+                                    "type": "string",
+                                    "enum": [
+                                      "independent",
+                                      "hinted",
+                                      "explained",
+                                      "after_feedback"
+                                    ]
+                                  },
+                                  "outcome": {
+                                    "type": "string",
+                                    "enum": [
+                                      "independent_correct",
+                                      "assisted_correct",
+                                      "needs_review"
+                                    ]
+                                  },
+                                  "feedback": {
+                                    "type": "object",
+                                    "properties": {
+                                      "score": {
+                                        "type": "number",
+                                        "minimum": 0,
+                                        "maximum": 10
+                                      },
+                                      "correct_points": {
+                                        "type": "array",
+                                        "items": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "missing_points": {
+                                        "type": "array",
+                                        "items": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "misconceptions": {
+                                        "type": "array",
+                                        "items": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "short_answer": {
+                                        "type": "string"
+                                      },
+                                      "detailed_answer": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "score",
+                                      "correct_points",
+                                      "missing_points",
+                                      "misconceptions",
+                                      "short_answer",
+                                      "detailed_answer"
+                                    ],
+                                    "additionalProperties": false
+                                  }
+                                },
+                                "required": [
+                                  "id",
+                                  "answer",
+                                  "reason",
+                                  "at",
+                                  "assistance",
+                                  "outcome",
+                                  "feedback"
+                                ],
+                                "additionalProperties": false
+                              },
+                              "recall": {
+                                "type": "object",
+                                "properties": {
+                                  "id": {
+                                    "type": "string"
+                                  },
+                                  "answer": {
+                                    "type": "string"
+                                  },
+                                  "reason": {
+                                    "type": "string",
+                                    "nullable": true,
+                                    "enum": [
+                                      "forgot",
+                                      "unclear",
+                                      "expression",
+                                      null
+                                    ]
+                                  },
+                                  "at": {
+                                    "type": "string"
+                                  },
+                                  "assistance": {
+                                    "type": "string",
+                                    "enum": [
+                                      "independent",
+                                      "hinted",
+                                      "explained",
+                                      "after_feedback"
+                                    ]
+                                  },
+                                  "outcome": {
+                                    "type": "string",
+                                    "enum": [
+                                      "independent_correct",
+                                      "assisted_correct",
+                                      "needs_review"
+                                    ]
+                                  },
+                                  "feedback": {
+                                    "type": "object",
+                                    "properties": {
+                                      "score": {
+                                        "type": "number",
+                                        "minimum": 0,
+                                        "maximum": 10
+                                      },
+                                      "correct_points": {
+                                        "type": "array",
+                                        "items": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "missing_points": {
+                                        "type": "array",
+                                        "items": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "misconceptions": {
+                                        "type": "array",
+                                        "items": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "short_answer": {
+                                        "type": "string"
+                                      },
+                                      "detailed_answer": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "score",
+                                      "correct_points",
+                                      "missing_points",
+                                      "misconceptions",
+                                      "short_answer",
+                                      "detailed_answer"
+                                    ],
+                                    "additionalProperties": false
+                                  }
+                                },
+                                "required": [
+                                  "id",
+                                  "answer",
+                                  "reason",
+                                  "at",
+                                  "assistance",
+                                  "outcome",
+                                  "feedback"
+                                ],
+                                "additionalProperties": false
+                              }
+                            },
+                            "required": [
+                              "hints"
+                            ],
+                            "additionalProperties": false
+                          }
+                        }
+                      },
+                      "required": [
+                        "version",
+                        "revision",
+                        "source",
+                        "questions",
+                        "progress"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "session_id",
+                    "topic",
+                    "status",
+                    "state"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/drill/session/{session_id}/action": {
+      "post": {
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "required": true,
+            "name": "session_id",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "revision": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "question_id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200
+                  },
+                  "action": {
+                    "type": "string",
+                    "enum": [
+                      "hint",
+                      "explain",
+                      "answer",
+                      "recall",
+                      "variant"
+                    ]
+                  },
+                  "answer": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 12000
+                  },
+                  "reason": {
+                    "type": "string",
+                    "nullable": true,
+                    "enum": [
+                      "forgot",
+                      "unclear",
+                      "expression",
+                      null
+                    ]
+                  }
+                },
+                "required": [
+                  "revision",
+                  "question_id",
+                  "action"
+                ],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Server-owned guided learning state",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "session_id": {
+                      "type": "string"
+                    },
+                    "topic": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "ongoing",
+                        "reviewed"
+                      ]
+                    },
+                    "state": {
+                      "type": "object",
+                      "properties": {
+                        "version": {
+                          "type": "number",
+                          "enum": [
+                            1
+                          ]
+                        },
+                        "revision": {
+                          "type": "integer",
+                          "minimum": 0
+                        },
+                        "source": {
+                          "type": "string",
+                          "enum": [
+                            "new",
+                            "due",
+                            "mistakes"
+                          ]
+                        },
+                        "questions": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string"
+                              },
+                              "question": {
+                                "type": "string"
+                              },
+                              "focus_area": {
+                                "type": "string"
+                              },
+                              "difficulty": {
+                                "type": "number"
+                              },
+                              "kind": {
+                                "type": "string",
+                                "enum": [
+                                  "judgment",
+                                  "choice",
+                                  "code",
+                                  "scenario"
+                                ]
+                              },
+                              "options": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string"
+                                }
+                              },
+                              "review_point": {
+                                "type": "string"
+                              },
+                              "primed": {
+                                "type": "boolean"
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "question",
+                              "focus_area",
+                              "difficulty",
+                              "kind",
+                              "options",
+                              "review_point",
+                              "primed"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "progress": {
+                          "type": "object",
+                          "additionalProperties": {
+                            "type": "object",
+                            "properties": {
+                              "exposure_at": {
+                                "type": "string"
+                              },
+                              "hints": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string"
+                                }
+                              },
+                              "explanation": {
+                                "type": "object",
+                                "properties": {
+                                  "short_answer": {
+                                    "type": "string"
+                                  },
+                                  "detailed_answer": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "short_answer",
+                                  "detailed_answer"
+                                ],
+                                "additionalProperties": false
+                              },
+                              "attempt": {
+                                "type": "object",
+                                "properties": {
+                                  "id": {
+                                    "type": "string"
+                                  },
+                                  "answer": {
+                                    "type": "string"
+                                  },
+                                  "reason": {
+                                    "type": "string",
+                                    "nullable": true,
+                                    "enum": [
+                                      "forgot",
+                                      "unclear",
+                                      "expression",
+                                      null
+                                    ]
+                                  },
+                                  "at": {
+                                    "type": "string"
+                                  },
+                                  "assistance": {
+                                    "type": "string",
+                                    "enum": [
+                                      "independent",
+                                      "hinted",
+                                      "explained",
+                                      "after_feedback"
+                                    ]
+                                  },
+                                  "outcome": {
+                                    "type": "string",
+                                    "enum": [
+                                      "independent_correct",
+                                      "assisted_correct",
+                                      "needs_review"
+                                    ]
+                                  },
+                                  "feedback": {
+                                    "type": "object",
+                                    "properties": {
+                                      "score": {
+                                        "type": "number",
+                                        "minimum": 0,
+                                        "maximum": 10
+                                      },
+                                      "correct_points": {
+                                        "type": "array",
+                                        "items": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "missing_points": {
+                                        "type": "array",
+                                        "items": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "misconceptions": {
+                                        "type": "array",
+                                        "items": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "short_answer": {
+                                        "type": "string"
+                                      },
+                                      "detailed_answer": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "score",
+                                      "correct_points",
+                                      "missing_points",
+                                      "misconceptions",
+                                      "short_answer",
+                                      "detailed_answer"
+                                    ],
+                                    "additionalProperties": false
+                                  }
+                                },
+                                "required": [
+                                  "id",
+                                  "answer",
+                                  "reason",
+                                  "at",
+                                  "assistance",
+                                  "outcome",
+                                  "feedback"
+                                ],
+                                "additionalProperties": false
+                              },
+                              "recall": {
+                                "type": "object",
+                                "properties": {
+                                  "id": {
+                                    "type": "string"
+                                  },
+                                  "answer": {
+                                    "type": "string"
+                                  },
+                                  "reason": {
+                                    "type": "string",
+                                    "nullable": true,
+                                    "enum": [
+                                      "forgot",
+                                      "unclear",
+                                      "expression",
+                                      null
+                                    ]
+                                  },
+                                  "at": {
+                                    "type": "string"
+                                  },
+                                  "assistance": {
+                                    "type": "string",
+                                    "enum": [
+                                      "independent",
+                                      "hinted",
+                                      "explained",
+                                      "after_feedback"
+                                    ]
+                                  },
+                                  "outcome": {
+                                    "type": "string",
+                                    "enum": [
+                                      "independent_correct",
+                                      "assisted_correct",
+                                      "needs_review"
+                                    ]
+                                  },
+                                  "feedback": {
+                                    "type": "object",
+                                    "properties": {
+                                      "score": {
+                                        "type": "number",
+                                        "minimum": 0,
+                                        "maximum": 10
+                                      },
+                                      "correct_points": {
+                                        "type": "array",
+                                        "items": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "missing_points": {
+                                        "type": "array",
+                                        "items": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "misconceptions": {
+                                        "type": "array",
+                                        "items": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "short_answer": {
+                                        "type": "string"
+                                      },
+                                      "detailed_answer": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "score",
+                                      "correct_points",
+                                      "missing_points",
+                                      "misconceptions",
+                                      "short_answer",
+                                      "detailed_answer"
+                                    ],
+                                    "additionalProperties": false
+                                  }
+                                },
+                                "required": [
+                                  "id",
+                                  "answer",
+                                  "reason",
+                                  "at",
+                                  "assistance",
+                                  "outcome",
+                                  "feedback"
+                                ],
+                                "additionalProperties": false
+                              }
+                            },
+                            "required": [
+                              "hints"
+                            ],
+                            "additionalProperties": false
+                          }
+                        }
+                      },
+                      "required": [
+                        "version",
+                        "revision",
+                        "source",
+                        "questions",
+                        "progress"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "session_id",
+                    "topic",
+                    "status",
+                    "state"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/drill/session/{session_id}/finish": {
+      "post": {
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "required": true,
+            "name": "session_id",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "revision": {
+                    "type": "integer",
+                    "minimum": 0
+                  }
+                },
+                "required": [
+                  "revision"
+                ],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Server-owned guided learning state",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "session_id": {
+                      "type": "string"
+                    },
+                    "topic": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "ongoing",
+                        "reviewed"
+                      ]
+                    },
+                    "state": {
+                      "type": "object",
+                      "properties": {
+                        "version": {
+                          "type": "number",
+                          "enum": [
+                            1
+                          ]
+                        },
+                        "revision": {
+                          "type": "integer",
+                          "minimum": 0
+                        },
+                        "source": {
+                          "type": "string",
+                          "enum": [
+                            "new",
+                            "due",
+                            "mistakes"
+                          ]
+                        },
+                        "questions": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string"
+                              },
+                              "question": {
+                                "type": "string"
+                              },
+                              "focus_area": {
+                                "type": "string"
+                              },
+                              "difficulty": {
+                                "type": "number"
+                              },
+                              "kind": {
+                                "type": "string",
+                                "enum": [
+                                  "judgment",
+                                  "choice",
+                                  "code",
+                                  "scenario"
+                                ]
+                              },
+                              "options": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string"
+                                }
+                              },
+                              "review_point": {
+                                "type": "string"
+                              },
+                              "primed": {
+                                "type": "boolean"
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "question",
+                              "focus_area",
+                              "difficulty",
+                              "kind",
+                              "options",
+                              "review_point",
+                              "primed"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "progress": {
+                          "type": "object",
+                          "additionalProperties": {
+                            "type": "object",
+                            "properties": {
+                              "exposure_at": {
+                                "type": "string"
+                              },
+                              "hints": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string"
+                                }
+                              },
+                              "explanation": {
+                                "type": "object",
+                                "properties": {
+                                  "short_answer": {
+                                    "type": "string"
+                                  },
+                                  "detailed_answer": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "short_answer",
+                                  "detailed_answer"
+                                ],
+                                "additionalProperties": false
+                              },
+                              "attempt": {
+                                "type": "object",
+                                "properties": {
+                                  "id": {
+                                    "type": "string"
+                                  },
+                                  "answer": {
+                                    "type": "string"
+                                  },
+                                  "reason": {
+                                    "type": "string",
+                                    "nullable": true,
+                                    "enum": [
+                                      "forgot",
+                                      "unclear",
+                                      "expression",
+                                      null
+                                    ]
+                                  },
+                                  "at": {
+                                    "type": "string"
+                                  },
+                                  "assistance": {
+                                    "type": "string",
+                                    "enum": [
+                                      "independent",
+                                      "hinted",
+                                      "explained",
+                                      "after_feedback"
+                                    ]
+                                  },
+                                  "outcome": {
+                                    "type": "string",
+                                    "enum": [
+                                      "independent_correct",
+                                      "assisted_correct",
+                                      "needs_review"
+                                    ]
+                                  },
+                                  "feedback": {
+                                    "type": "object",
+                                    "properties": {
+                                      "score": {
+                                        "type": "number",
+                                        "minimum": 0,
+                                        "maximum": 10
+                                      },
+                                      "correct_points": {
+                                        "type": "array",
+                                        "items": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "missing_points": {
+                                        "type": "array",
+                                        "items": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "misconceptions": {
+                                        "type": "array",
+                                        "items": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "short_answer": {
+                                        "type": "string"
+                                      },
+                                      "detailed_answer": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "score",
+                                      "correct_points",
+                                      "missing_points",
+                                      "misconceptions",
+                                      "short_answer",
+                                      "detailed_answer"
+                                    ],
+                                    "additionalProperties": false
+                                  }
+                                },
+                                "required": [
+                                  "id",
+                                  "answer",
+                                  "reason",
+                                  "at",
+                                  "assistance",
+                                  "outcome",
+                                  "feedback"
+                                ],
+                                "additionalProperties": false
+                              },
+                              "recall": {
+                                "type": "object",
+                                "properties": {
+                                  "id": {
+                                    "type": "string"
+                                  },
+                                  "answer": {
+                                    "type": "string"
+                                  },
+                                  "reason": {
+                                    "type": "string",
+                                    "nullable": true,
+                                    "enum": [
+                                      "forgot",
+                                      "unclear",
+                                      "expression",
+                                      null
+                                    ]
+                                  },
+                                  "at": {
+                                    "type": "string"
+                                  },
+                                  "assistance": {
+                                    "type": "string",
+                                    "enum": [
+                                      "independent",
+                                      "hinted",
+                                      "explained",
+                                      "after_feedback"
+                                    ]
+                                  },
+                                  "outcome": {
+                                    "type": "string",
+                                    "enum": [
+                                      "independent_correct",
+                                      "assisted_correct",
+                                      "needs_review"
+                                    ]
+                                  },
+                                  "feedback": {
+                                    "type": "object",
+                                    "properties": {
+                                      "score": {
+                                        "type": "number",
+                                        "minimum": 0,
+                                        "maximum": 10
+                                      },
+                                      "correct_points": {
+                                        "type": "array",
+                                        "items": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "missing_points": {
+                                        "type": "array",
+                                        "items": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "misconceptions": {
+                                        "type": "array",
+                                        "items": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "short_answer": {
+                                        "type": "string"
+                                      },
+                                      "detailed_answer": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "score",
+                                      "correct_points",
+                                      "missing_points",
+                                      "misconceptions",
+                                      "short_answer",
+                                      "detailed_answer"
+                                    ],
+                                    "additionalProperties": false
+                                  }
+                                },
+                                "required": [
+                                  "id",
+                                  "answer",
+                                  "reason",
+                                  "at",
+                                  "assistance",
+                                  "outcome",
+                                  "feedback"
+                                ],
+                                "additionalProperties": false
+                              }
+                            },
+                            "required": [
+                              "hints"
+                            ],
+                            "additionalProperties": false
+                          }
+                        }
+                      },
+                      "required": [
+                        "version",
+                        "revision",
+                        "source",
+                        "questions",
+                        "progress"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "session_id",
+                    "topic",
+                    "status",
+                    "state"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
     "/api/profile": {
       "get": {
         "responses": {

@@ -287,7 +287,7 @@ export default function TopicDetail() {
                     key={session.session_id}
                     index={index}
                     session={session}
-                    onOpen={() => navigate(`/review/${session.session_id}`)}
+                    onOpen={() => navigate(session.meta?.drill_learning ? `/topic-drill/learn/${session.session_id}` : `/review/${session.session_id}`)}
                   />
                 ))}
               </div>
@@ -474,6 +474,7 @@ function SessionTimelineCard({ session, index, onOpen }) {
 
           <div className="flex items-center justify-between gap-4 xl:flex-col xl:items-end">
             <ScorePill score={avg} large />
+            {session.meta?.drill_learning && <span className="text-xs text-dim">独立应用分，辅助练习不计入</span>}
             <div className="inline-flex items-center gap-1 text-xs text-dim transition-colors group-hover:text-text">
               查看完整复盘
               <ChevronRight size={15} />
@@ -629,6 +630,10 @@ function getMasteryScore(data) {
 
 function getSessionAverage(session) {
   if (!session) return null;
+  if (session.meta?.drill_learning) {
+    const independent = session.overall?.independent_avg_score;
+    return typeof independent === "number" ? roundScore(independent) : null;
+  }
   const overallAvg = session?.overall?.avg_score;
   if (typeof overallAvg === "number") return roundScore(overallAvg);
 

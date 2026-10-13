@@ -1,201 +1,396 @@
-import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
-import { ArrowUpRight, BookOpen, Layers, Loader2, Play, Plus, Target } from "lucide-react";
-import TopicCard from "../components/TopicCard";
+import { useEffect, useRef, useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
+import { BookOpen, Loader2, Plus, Target } from "lucide-react";
 import AddTopicDialog from "../components/AddTopicDialog";
+import { InterviewStartResponseSchema } from "@techspar/contracts";
 import { getTopics, startInterview } from "../api/interview";
+import { getDrillQueue, startDrill, type DrillQueue } from "../api/drill";
+import { getAuthToken } from "../lib/authSession";
+import useAuth from "../hooks/useAuth";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
-import { Skeleton } from "@/components/ui/skeleton";
-import useTaskStatus from "../hooks/useTaskStatus";
+import { Card } from "@/components/ui/card";
 
-interface TopicInfo {
-  name?: string;
-  icon?: string;
-}
-
-type Topics = Record<string, TopicInfo>;
-
-interface StartInterviewResponse {
-  session_id: string;
-  [key: string]: unknown;
-}
-
-function errorMessage(error: unknown) {
-  return error instanceof Error ? error.message : String(error);
-}
+const modes = [
+  { id: "new", label: "带教学新知识" },
+  { id: "due", label: "到期复习" },
+  { id: "mistakes", label: "错题回顾" },
+  { id: "exam", label: "原有考核" },
+] as const;
+type Mode = (typeof modes)[number]["id"];
+type Topics = Record<string, { name?: string }>;
+const evidenceLabels = {
+  independent_correct: "独立答对，待巩固",
+  assisted_correct: "辅助后答对",
+  needs_review: "仍需复习",
+  historical_unknown: "历史错题，辅助情况未知",
+  weak_point: "画像薄弱点",
+};
 
 export default function TopicDrill() {
+  const { token } = useAuth();
+  return <TopicDrillContent key={token} />;
+}
+
+function TopicDrillContent() {
   const navigate = useNavigate();
   const [topics, setTopics] = useState<Topics>({});
-  const [selectedTopic, setSelectedTopic] = useState<string | null>(null);
-  const [pageLoading, setPageLoading] = useState(true);
-  const [showAddTopic, setShowAddTopic] = useState(false);
-  const { creatingSessionMode, setCreatingSessionMode } = useTaskStatus();
-  const loading = creatingSessionMode === "topic_drill";
-  const topicEntries = Object.entries(topics);
-  const selectedName = selectedTopic ? topics[selectedTopic]?.name || selectedTopic : "";
-
+  const [topic, setTopic] = useState("");
+  const [mode, setMode] = useState<Mode>("new");
+  const [queue, setQueue] = useState<DrillQueue | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [starting, setStarting] = useState(false);
+  const [error, setError] = useState("");
+  const [showAdd, setShowAdd] = useState(false);
+  const [reload, setReload] = useState(0);
+  const generation = useRef(0);
+  const busy = useRef(false);
   useEffect(() => {
-    let active = true;
-    getTopics()
-      .then((data) => {
-        if (active) setTopics(data as unknown as Topics);
-      })
-      .catch(() => {
-        if (active) setTopics({});
+    const revision = ++generation.current;
+    const controller = new AbortController();
+    const loadTopics = getTopics().then((value) => {
+      if (revision === generation.current)
+        setTopics(value as unknown as Topics);
+    });
+    const loadQueue = getDrillQueue(topic || undefined, controller.signal).then(
+      (value) => {
+        if (revision === generation.current) setQueue(value);
+      },
+    );
+    void Promise.allSettled([loadTopics, loadQueue])
+      .then((results) => {
+        if (!controller.signal.aborted && revision === generation.current) {
+          const failures = results.filter(
+            (value) => value.status === "rejected",
+          );
+          setError(
+            failures
+              .map((value) =>
+                String(
+                  value.reason instanceof Error
+                    ? value.reason.message
+                    : value.reason,
+                ),
+              )
+              .join("；"),
+          );
+        }
       })
       .finally(() => {
-        if (active) setPageLoading(false);
+        if (revision === generation.current) setLoading(false);
       });
-    return () => { active = false; };
-  }, []);
-
-  const handleTopicCreated = async (key: string) => {
-    try {
-      const data = await getTopics();
-      setTopics(data as unknown as Topics);
-    } catch { /* 列表刷新失败时保持现状 */ }
-    setSelectedTopic(key);
+    return () => {
+      generation.current = revision + 1;
+      controller.abort();
+    };
+  }, [topic, reload]);
+  const prepareLoad = () => {
+    setLoading(true);
+    setTopics({});
+    setQueue(null);
+    setError("");
   };
-
-  const handleStart = async () => {
-    if (!selectedTopic) return;
-    setCreatingSessionMode("topic_drill");
+  const items =
+    queue?.items.filter((item) =>
+      mode === "due"
+        ? item.due
+        : !item.improved &&
+          ["assisted_correct", "needs_review", "historical_unknown"].includes(
+            item.evidence,
+          ),
+    ) ?? [];
+  const start = async (point?: string) => {
+    if (!topic || !topics[topic] || busy.current) return;
+    busy.current = true;
+    setStarting(true);
+    setError("");
+    const identity = getAuthToken();
+    const revision = generation.current;
     try {
-      const data = await startInterview("topic_drill", selectedTopic) as unknown as StartInterviewResponse;
-      navigate(`/interview/${data.session_id}`, { state: data });
+      if (mode === "exam") {
+        const session = InterviewStartResponseSchema.parse(
+          await startInterview("topic_drill", topic),
+        );
+        if (identity === getAuthToken() && revision === generation.current)
+          navigate("/interview/" + session.session_id, { state: session });
+      } else {
+        const session = await startDrill({
+          topic,
+          source: mode,
+          ...(point ? { points: [point] } : {}),
+        });
+        if (identity === getAuthToken() && revision === generation.current)
+          navigate("/topic-drill/learn/" + session.session_id);
+      }
     } catch (error) {
-      alert("启动失败: " + errorMessage(error));
+      if (identity === getAuthToken() && revision === generation.current)
+        setError(error instanceof Error ? error.message : String(error));
     } finally {
-      setCreatingSessionMode(null);
+      busy.current = false;
+      setStarting(false);
     }
   };
-
   return (
-    <div className="relative mx-auto w-full max-w-[1180px] flex-1 px-4 py-8 md:px-7 xl:px-8">
-      <header className="flex flex-col gap-5 border-b border-border/65 pb-6 md:flex-row md:items-start md:justify-between">
-        <div className="flex items-start gap-3.5">
-          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-primary/20 bg-primary/10 text-primary shadow-sm shadow-primary/5">
-            <Target size={21} />
-          </div>
-          <div>
-            <h1 className="text-2xl font-display font-bold tracking-tight text-text md:text-[30px]">专项训练</h1>
-            <p className="mt-1 max-w-2xl text-sm leading-6 text-dim">
-              选择一个训练领域，AI 会参考该领域的核心知识和高频题目动态追问。
-            </p>
-          </div>
+    <div className="mx-auto flex w-full max-w-[1180px] flex-1 flex-col gap-4 px-4 py-5 md:h-full md:min-h-0 md:flex-none md:overflow-hidden md:px-7">
+      <header className="flex shrink-0 flex-wrap items-center justify-between gap-3">
+        <div>
+          <h1 className="flex items-center gap-2 text-xl font-semibold">
+            <Target size={20} className="text-primary" />
+            专项训练
+          </h1>
+          <p className="mt-1 text-sm text-dim">
+            恢复知识、回顾错题，再用无提示的场景题验证掌握。
+          </p>
         </div>
-
-        <Button
-          variant="outline"
-          className="self-start rounded-xl"
-          onClick={() => navigate("/knowledge")}
-        >
+        <Button variant="outline" onClick={() => navigate("/knowledge")}>
           <BookOpen size={16} />
           管理训练领域
-          <ArrowUpRight size={14} />
         </Button>
       </header>
-
-      <section className="mt-6">
-        <div className="mb-4 flex items-end justify-between gap-3">
-          <div className="flex items-center gap-2.5">
-            <Layers size={18} className="text-primary" />
-            <div>
-              <h2 className="text-base font-semibold text-text">选择训练领域</h2>
-              <p className="mt-0.5 text-[12px] text-dim">选择一个领域开始训练，没有合适的可以新建。</p>
-            </div>
-          </div>
-          {!pageLoading && topicEntries.length > 0 && (
-            <span className="text-[11px] tabular-nums text-dim">共 {topicEntries.length} 个领域</span>
-          )}
-        </div>
-
-        {pageLoading ? (
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {Array.from({ length: 6 }).map((_, index) => (
-              <Skeleton key={index} className="h-[96px] rounded-2xl border border-border/50 bg-card/60" />
-            ))}
-          </div>
-        ) : topicEntries.length === 0 ? (
-          <Card className="border-dashed border-border/80 bg-card/45">
-            <CardContent className="flex min-h-[260px] flex-col items-center justify-center px-6 text-center">
-              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10 text-primary">
-                <BookOpen size={21} />
-              </div>
-              <h3 className="mt-4 text-base font-semibold text-text">还没有训练领域</h3>
-              <p className="mt-2 max-w-md text-[13px] leading-6 text-dim">
-                先创建一个领域并准备核心知识，就能选择它开始专项训练。
-              </p>
-              <Button variant="gradient" className="mt-5" onClick={() => setShowAddTopic(true)}>
-                创建训练领域
-              </Button>
-            </CardContent>
-          </Card>
-        ) : (
-          <div className="grid grid-cols-1 gap-3 pb-28 sm:grid-cols-2 lg:grid-cols-3">
-            {topicEntries.map(([key, info]) => (
-              <TopicCard
-                key={key}
-                name={info.name || key}
-                icon={info.icon}
-                selected={selectedTopic === key}
-                onClick={() => setSelectedTopic(key)}
-              />
-            ))}
-            <button
-              type="button"
-              onClick={() => setShowAddTopic(true)}
-              className="group flex cursor-pointer items-center gap-4 rounded-2xl border border-dashed border-border/80 bg-card/30 p-4 text-left transition-all duration-300 hover:-translate-y-1 hover:border-primary/50 hover:bg-card hover:shadow-lg hover:shadow-primary/5 md:gap-5 md:px-6 md:py-5"
-            >
-              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border border-dashed border-border/80 text-dim transition-colors duration-300 group-hover:border-primary/30 group-hover:bg-primary/10 group-hover:text-primary md:h-14 md:w-14">
-                <Plus size={24} />
-              </div>
-              <div className="min-w-0 flex-1">
-                <div className="text-[14px] font-extrabold leading-snug tracking-tight text-text transition-colors duration-300 group-hover:text-primary/95 md:text-[15px]">
-                  新建领域
-                </div>
-                <div className="mt-0.5 text-[12px] text-dim">没找到你的方向？新建一个</div>
-              </div>
-            </button>
-          </div>
-        )}
-      </section>
-
-      <AddTopicDialog
-        open={showAddTopic}
-        onClose={() => setShowAddTopic(false)}
-        onCreated={handleTopicCreated}
-      />
-
-      <div className={cn(
-        "fixed bottom-6 left-[max(1rem,calc(50%-450px))] right-[max(1rem,calc(50%-450px))] z-40 transition-all duration-300 md:left-1/2 md:right-auto md:w-[560px] md:-translate-x-1/2",
-        selectedTopic || loading
-          ? "translate-y-0 opacity-100"
-          : "pointer-events-none translate-y-6 scale-95 opacity-0"
-      )}>
-        <div className="flex items-center justify-between gap-4 rounded-2xl border border-border/80 bg-card/95 p-2.5 pl-4 shadow-2xl backdrop-blur-xl md:pl-5">
-          <div className="min-w-0">
-            <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-dim">本次训练领域</div>
-            <div className="mt-1 truncate text-sm font-semibold text-text">{selectedName || "正在准备"}</div>
-          </div>
-          <Button
-            variant="gradient"
-            size="lg"
-            className="h-12 shrink-0 rounded-xl px-6 font-semibold"
-            disabled={!selectedTopic || loading}
-            onClick={handleStart}
-          >
-            {loading ? (
-              <><Loader2 size={16} className="animate-spin" /> 正在创建...</>
-            ) : (
-              <><Play size={16} className="fill-current" /> 开始专项训练</>
+      <div
+        className="flex shrink-0 flex-wrap gap-2"
+        role="tablist"
+        aria-label="训练方式"
+      >
+        {modes.map((item) => (
+          <button
+            key={item.id}
+            role="tab"
+            aria-selected={mode === item.id}
+            disabled={starting}
+            onClick={() => setMode(item.id)}
+            className={cn(
+              "rounded-xl border px-3 py-2 text-sm focus-visible:ring-2 focus-visible:ring-primary",
+              mode === item.id
+                ? "border-primary/40 bg-primary/10 text-primary"
+                : "border-border bg-card text-dim",
             )}
+          >
+            {item.label}
+            {item.id === "due" && queue
+              ? ` (${queue.items.filter((value) => value.due).length})`
+              : ""}
+          </button>
+        ))}
+      </div>
+      <div className="flex shrink-0 flex-wrap items-center gap-2">
+        <label htmlFor="drill-topic" className="text-sm font-medium">
+          训练领域
+        </label>
+        <select
+          id="drill-topic"
+          disabled={loading || starting}
+          value={topic}
+          onChange={(event) => {
+            prepareLoad();
+            setTopic(event.target.value);
+          }}
+          className="min-w-40 rounded-lg border border-border bg-card px-3 py-2 text-sm focus-visible:ring-2 focus-visible:ring-primary"
+        >
+          <option value="">请选择领域</option>
+          {Object.entries(topics).map(([key, item]) => (
+            <option key={key} value={key}>
+              {item.name || key}
+            </option>
+          ))}
+        </select>
+        <Button
+          size="sm"
+          variant="ghost"
+          disabled={starting}
+          onClick={() => setShowAdd(true)}
+        >
+          <Plus size={14} />
+          新建
+        </Button>
+      </div>
+      {error && (
+        <div
+          role="alert"
+          className="flex shrink-0 flex-wrap items-center gap-2 rounded-xl border border-destructive/30 bg-destructive/5 p-3 text-sm"
+        >
+          <span className="flex-1">{error}</span>
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={starting || loading}
+            onClick={() => {
+              prepareLoad();
+              setReload((value) => value + 1);
+            }}
+          >
+            刷新重试
           </Button>
         </div>
-      </div>
+      )}
+      {loading ? (
+        <p role="status" className="text-dim">
+          正在加载训练与复习计划…
+        </p>
+      ) : (
+        <Card className="flex min-h-0 flex-1 flex-col overflow-hidden">
+          <div className="shrink-0 border-b border-border px-5 py-3">
+            <h2 className="font-semibold">
+              {modes.find((item) => item.id === mode)!.label}
+            </h2>
+            <p className="mt-1 text-xs text-dim">
+              {mode === "new"
+                ? "每组 4 题：判断纠错 → 选择解释 → 代码找错 → 场景应用；同一个小知识点循序练习。"
+                : mode === "exam"
+                  ? "保留原有整轮作答、结束后统一评分的流程。"
+                  : mode === "due"
+                    ? "复用画像中的间隔计划；低分或辅助练习次日复习，独立应用通过后逐步延长。"
+                    : "查看原题、原回答与遗漏点，选择一个薄弱点开始变式练习。"}
+            </p>
+          </div>
+          <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-5">
+            {!!queue?.active_sessions.length && (
+              <section className="space-y-2">
+                <h3 className="text-sm font-medium">继续未完成的带教训练</h3>
+                {queue.active_sessions.map((item) => (
+                  <Link
+                    key={item.session_id}
+                    to={
+                      "/topic-drill/learn/" +
+                      encodeURIComponent(item.session_id)
+                    }
+                    className="flex items-center justify-between gap-3 rounded-xl border border-border p-3 text-sm hover:bg-secondary/40"
+                  >
+                    <span>
+                      {topics[item.topic]?.name || item.topic} · {item.answered}
+                      /{item.total} 题
+                    </span>
+                    <span className="text-primary">继续</span>
+                  </Link>
+                ))}
+              </section>
+            )}
+            {mode === "new" || mode === "exam" ? (
+              <div className="rounded-xl border border-border bg-secondary/20 p-4 text-sm leading-7">
+                {mode === "new" ? (
+                  <>
+                    <p>不会时可以选择原因、逐层获取提示，或查看讲解。</p>
+                    <p>
+                      每题立即指出说对的部分、遗漏点与错误理解；隐藏答案后再用自己的话复述。
+                    </p>
+                    <p className="mt-2 text-dim">
+                      提示后答对与独立答对分开记录。选择、判断与同日巩固不等于已经掌握。
+                    </p>
+                  </>
+                ) : (
+                  <p>
+                    适合知识已经恢复后检查独立回答水平。题数和发散度仍使用设置页的考核参数。
+                  </p>
+                )}
+              </div>
+            ) : items.length ? (
+              <section aria-label="复习内容" className="space-y-3">
+                {items.map((item) => (
+                  <article
+                    key={itemKey(item.topic, item.point)}
+                    className="rounded-xl border border-border p-4"
+                  >
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <h3 className="text-sm font-semibold">{item.point}</h3>
+                      <span className="text-xs text-dim">
+                        {item.improved
+                          ? "已独立巩固，到期保鲜"
+                          : evidenceLabels[item.evidence]}{" "}
+                        ·{" "}
+                        {item.next_review
+                          ? "下次 " + item.next_review
+                          : "尚未建立计划"}
+                      </span>
+                    </div>
+                    {item.question && (
+                      <p className="mt-2 text-sm">原题：{item.question}</p>
+                    )}
+                    <details className="mt-2 text-sm">
+                      <summary className="cursor-pointer text-primary">
+                        查看原回答与遗漏
+                      </summary>
+                      <p className="mt-2 whitespace-pre-wrap">
+                        {item.answer ?? "没有可关联的历史回答。"}
+                      </p>
+                      <p className="mt-2 text-dim">
+                        {item.assessment ?? "尚无逐题点评，练习后会记录。"}
+                      </p>
+                      {item.session_id && (
+                        <Link
+                          className="mt-2 inline-block text-primary underline"
+                          to={
+                            item.evidence === "historical_unknown"
+                              ? "/review/" + item.session_id
+                              : "/topic-drill/learn/" + item.session_id
+                          }
+                        >
+                          查看训练记录
+                        </Link>
+                      )}
+                    </details>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="mt-3"
+                      disabled={!topic || starting || !!error}
+                      onClick={() => void start(item.point)}
+                    >
+                      练这个知识点
+                    </Button>
+                  </article>
+                ))}
+              </section>
+            ) : (
+              <p className="py-6 text-center text-sm text-dim">
+                {mode === "due"
+                  ? "当前没有到期复习内容。"
+                  : "当前没有待回顾的错题。"}
+              </p>
+            )}
+          </div>
+          <footer className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-t border-border px-5 py-3">
+            <span className="text-xs text-dim">
+              {topic ? topics[topic]?.name || topic : "先选择一个领域"}
+              {queue ? " · 复习日期采用现有 UTC 计划" : ""}
+            </span>
+            <Button
+              disabled={
+                !topic ||
+                !topics[topic] ||
+                starting ||
+                (mode !== "exam" && !!error) ||
+                ((mode === "due" || mode === "mistakes") && !items.length)
+              }
+              onClick={() => void start()}
+            >
+              {starting ? (
+                <>
+                  <Loader2 size={16} className="animate-spin" />
+                  正在创建…
+                </>
+              ) : mode === "new" ? (
+                "开始带教训练"
+              ) : mode === "exam" ? (
+                "开始原有考核"
+              ) : (
+                "开始本轮复习（最多 4 点）"
+              )}
+            </Button>
+          </footer>
+        </Card>
+      )}
+      <AddTopicDialog
+        open={showAdd}
+        onClose={() => setShowAdd(false)}
+        onCreated={async (key) => {
+          prepareLoad();
+          setTopic(key);
+          setReload((value) => value + 1);
+        }}
+      />
     </div>
   );
+}
+function itemKey(topic: string, point: string) {
+  return JSON.stringify([topic, point]);
 }

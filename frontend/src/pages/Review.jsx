@@ -567,6 +567,10 @@ export default function Review() {
     if (!review && !scores) {
       getReview(sessionId)
         .then((data) => {
+          if (data.meta?.drill_learning) {
+            navigate(`/topic-drill/learn/${sessionId}`, { replace: true });
+            return;
+          }
           setReview(data.review);
           if (data.scores) setScores(data.scores);
           if (data.questions) setQuestions(data.questions);
@@ -594,7 +598,7 @@ export default function Review() {
         .catch((err) => setReview("加载失败: " + err.message))
         .finally(() => setLoading(false));
     }
-  }, [sessionId, review, scores]);
+  }, [sessionId, review, scores, navigate]);
 
   if (loading) {
     return (

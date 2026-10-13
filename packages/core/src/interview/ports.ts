@@ -1,4 +1,5 @@
 import type { InterviewStreamEvent } from './results.ts'
+import type { DrillState } from './drill-model.ts'
 import type { IdGenerator } from '../account/ports.ts'
 import type { RequestContext } from '../kernel/context.ts'
 import type { KnowledgeQuery, KnowledgeStore } from '../knowledge/ports.ts'
@@ -28,6 +29,8 @@ export interface InterviewSessionRepository {
   completeJobPrep(input: { userId: string; key: string; owner: string; sessionId: string; meta: Record<string, unknown>; questions: InterviewQuestion[]; existing: boolean }): Promise<boolean>
   create(input: { sessionId: string; userId: string; mode: InterviewMode; topic?: string; questions?: InterviewQuestion[]; meta?: Record<string, unknown> }): Promise<void>
   get(sessionId: string, userId: string): Promise<InterviewSession | undefined>
+  drillSessions(userId: string, topic?: string): Promise<InterviewSession[]>
+  saveDrillState(input: { sessionId: string; userId: string; expectedRevision: number; state: DrillState; finished?: { review: string; scores: Array<Record<string, unknown>>; overall: Record<string, unknown>; transcript: InterviewMessage[] } }): Promise<boolean>
   appendMessage(sessionId: string, userId: string, role: 'user' | 'assistant', content: string): Promise<boolean>
   saveQuestions(sessionId: string, userId: string, questions: InterviewQuestion[]): Promise<boolean>
   saveAnswers(sessionId: string, userId: string, answers: InterviewAnswer[]): Promise<boolean>
