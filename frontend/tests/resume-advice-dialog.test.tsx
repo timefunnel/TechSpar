@@ -49,6 +49,9 @@ beforeEach(async () => {
 });
 afterEach(async () => {
   if (root) await act(async () => root!.unmount());
+  // Radix restores focus on a timer. Drain it while this Window's Event
+  // constructors are still installed, before the next test owns the DOM.
+  await settle();
   root = undefined; document.body.innerHTML = ''; await setResumeAccount(null).catch(() => undefined);
 });
 afterAll(() => {
@@ -127,4 +130,80 @@ test('account switch closes the dialog and rejects delayed results from the prev
   await act(async () => finish(new Response(JSON.stringify(optimization)))); await settle();
   expect(document.body.textContent).not.toContain('修改后');
   expect(useResumeStore.getState().resumes).toEqual({});
+});
+
+function enhancedReports() {
+  globalThis.fetch = server.fetch(async (url, options) => {
+    const input = JSON.parse(String(options?.body));
+    calls.push({ url: String(url), input });
+    const response = String(url).endsWith('/evaluate') ? { ...evaluation, assessment: { ...evaluation.assessment,
+      issues: [{ severity: 'high', location: '工作经历', evidence: '负责接口开发', suggestion: '补充个人设计与实现', field_id: 'experience:job-a', evidence_kind: 'quote' }],
+      follow_up_questions: [{ field_id: 'experience:job-a', question: '你具体负责了哪些方案和实现？', purpose: '明确个人贡献边界' }],
+      role_match: input.jd_text ? { score: 70, rationale: '对照完整岗位要求', matched: ['接口开发'], gaps: ['性能数据'], requirements: [
+        { requirement: '接口开发', status: 'matched', evidence: [{ field_id: 'experience:job-a', quote: '负责接口开发' }], suggestion: '突出已有接口开发经验' },
+        { requirement: '性能优化', status: 'gap', evidence: [], suggestion: '未提供相关证据，请补充真实经历' },
+      ] } : null,
+    } } : optimization;
+    return Response.json(response);
+  });
+}
+
+async function typeField(field: HTMLInputElement | HTMLTextAreaElement, value: string) {
+  await act(async () => {
+    const prototype = field.tagName === 'TEXTAREA' ? browser.HTMLTextAreaElement.prototype : browser.HTMLInputElement.prototype;
+    Object.getOwnPropertyDescriptor(prototype, 'value')!.set!.call(field, value);
+    field.dispatchEvent(new browser.Event('input', { bubbles: true }));
+  });
+}
+async function selectTab(prefix: string) {
+  const button = Array.from(document.querySelectorAll('[role="tab"]')).find((item) => item.textContent?.startsWith(prefix));
+  expect(button).toBeDefined();
+  await act(async () => button!.dispatchEvent(new browser.KeyboardEvent('keydown', { key: 'Enter', bubbles: true })));
+  await settle();
+}
+
+test('locates a diagnostic quote and sends only answered, field-bound clarifications to optimization', async () => {
+  enhancedReports(); await mount(); await click('评估简历');
+  expect(calls[0]!.input.diagnostic_fields).toEqual(expect.arrayContaining([expect.objectContaining({ id: 'experience:job-a', text: '负责接口开发', can_optimize: true })]));
+  expect(document.querySelector('mark')?.textContent).toBe('负责接口开发');
+  expect(document.body.textContent).toContain('定位原文 · 工作经历');
+  await click('补充经历，完善优化依据（1 个问题）');
+  const answer = document.querySelector('textarea[aria-label^="补充回答"]') as HTMLTextAreaElement;
+  await typeField(answer, '负责接口方案设计，完成权限校验和异常处理。');
+  await click('根据已补充内容生成建议');
+  expect(calls[1]!.input.clarifications).toEqual([{ field_id: 'experience:job-a', question: '你具体负责了哪些方案和实现？', answer: '负责接口方案设计，完成权限校验和异常处理。' }]);
+  expect(document.body.textContent).toContain('本人补充依据');
+  await selectTab('诊断报告');
+  expect(document.body.textContent).toContain('个人设计与实现');
+});
+
+test('each change can be accepted, rejected and undone before explicitly saving', async () => {
+  await mount(); await click('生成优化建议');
+  await click('采纳此项'); expect(document.body.textContent).toContain('确认并另存优化版（1 项）');
+  await click('撤销采纳'); expect(document.body.textContent).toContain('确认并另存优化版（0 项）');
+  await click('拒绝此项'); expect(document.body.textContent).toContain('已拒绝');
+  await click('撤销拒绝'); expect(document.body.textContent).toContain('待审阅');
+  expect(Object.keys(useResumeStore.getState().resumes)).toHaveLength(1);
+});
+
+test('changing an answer invalidates previous suggestions while keeping the diagnosis', async () => {
+  enhancedReports(); await mount(); await click('评估简历');
+  await click('补充经历，完善优化依据（1 个问题）');
+  await typeField(document.querySelector('textarea[aria-label^="补充回答"]') as HTMLTextAreaElement, '负责接口实现');
+  await click('根据已补充内容生成建议');
+  expect(document.body.textContent).toContain('修改后');
+  await selectTab('补充经历');
+  await typeField(document.querySelector('textarea[aria-label^="补充回答"]') as HTMLTextAreaElement, '负责接口设计和实现');
+  expect(document.body.textContent).not.toContain('确认并另存优化版');
+  await selectTab('诊断报告'); expect(document.body.textContent).toContain('个人设计与实现');
+});
+
+test('JD matching displays individual requirements and separates absent evidence from existing experience', async () => {
+  enhancedReports(); await mount();
+  await typeField(document.querySelector('textarea')!, '接口开发与性能优化');
+  await click('评估简历');
+  expect(calls[0]!.input.jd_text).toBe('接口开发与性能优化');
+  const report = document.querySelector('[aria-label="岗位匹配分析"]')!;
+  expect(report.textContent).toContain('已有证据'); expect(report.textContent).toContain('简历缺少证据');
+  expect(report.querySelector('mark')?.textContent).toBe('负责接口开发');
 });

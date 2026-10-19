@@ -1,9 +1,10 @@
-import type { ResumeOptimization, ResumeOptimizeInput } from '@techspar/contracts';
+import type { ResumeDiagnosticField, ResumeOptimization, ResumeOptimizeInput } from '@techspar/contracts';
 import type { ResumeData } from '../types/resume';
 import { generateResumeMarkdown, markdownFromText } from '../utils/markdown';
 import { generateUUID } from '../utils/uuid';
 import { commitResumeSnapshot, flushResumePersistence, getResumeAccount, getServerResume } from '../store/resumeAccount';
 import { useResumeStore } from '../store/useResumeStore';
+import { DEFAULT_FIELD_ORDER } from '../config';
 
 type EditableField = { id: string; label: string; text: string; apply: (resume: ResumeData, html: string) => void };
 
@@ -34,6 +35,34 @@ function editableFields(resume: ResumeData): EditableField[] {
   return fields;
 }
 
+export function buildDiagnosticFields(resume: ResumeData): ResumeDiagnosticField[] {
+  const fields: ResumeDiagnosticField[] = editableFields(resume).map(({ id, label, text }) => ({ id, label, text, can_optimize: true }));
+  const enabled = new Map(resume.menuSections.filter((section) => section.enabled).map((section) => [section.id, section.title]));
+  const add = (id: string, label: string, value: string | undefined) => fields.push({ id, label, text: (value ?? '').trim(), can_optimize: false });
+  if (enabled.has('basic')) {
+    for (const field of resume.basic.fieldOrder?.length ? resume.basic.fieldOrder : DEFAULT_FIELD_ORDER) {
+      if (!field.visible) continue;
+      const value = resume.basic[field.key];
+      if (typeof value === 'string') add(`basic:${field.key}`, `${enabled.get('basic')} · ${field.label}`, value);
+    }
+  }
+  const metadata = <T extends { id: string; visible?: boolean }>(section: string, items: T[], columns: [keyof T, string][]) => {
+    if (!enabled.has(section)) return;
+    for (const [index, item] of items.filter((item) => item.visible).entries()) {
+      for (const [key, label] of columns) {
+        add(`${section}:${item.id}:${String(key)}`, `${enabled.get(section)} · 第 ${index + 1} 项 · ${label}`, String(item[key] ?? ''));
+      }
+    }
+  };
+  metadata('experience', resume.experience, [['company', '公司'], ['position', '职位'], ['date', '起止时间']]);
+  metadata('projects', resume.projects, [['name', '项目名称'], ['role', '角色'], ['date', '起止时间']]);
+  metadata('education', resume.education, [['school', '学校'], ['major', '专业'], ['degree', '学历'], ['startDate', '开始时间'], ['endDate', '结束时间']]);
+  for (const [section, items] of Object.entries(resume.customData)) {
+    metadata(section, items, [['title', '名称'], ['subtitle', '副标题'], ['dateRange', '起止时间']]);
+  }
+  return fields;
+}
+
 export function buildEditorAdviceInput(resume: ResumeData, targetRole = '', jdText = ''): ResumeOptimizeInput {
   const fields = editableFields(resume).map(({ id, label, text }) => ({ id, label, text }));
   const enabled = new Set(resume.menuSections.filter((section) => section.enabled).map((section) => section.id));
@@ -43,7 +72,8 @@ export function buildEditorAdviceInput(resume: ResumeData, targetRole = '', jdTe
     !(enabled.has('education') && resume.education.some((item) => item.visible && item.school.trim()))) {
     throw new Error('请先填写简历内容');
   }
-  return { source: 'editor', resume_text: generateResumeMarkdown(resume, { strictSections: true }), fields, target_role: targetRole.trim(), jd_text: jdText.trim() };
+  return { source: 'editor', resume_text: generateResumeMarkdown(resume, { strictSections: true }), fields,
+    diagnostic_fields: buildDiagnosticFields(resume), target_role: targetRole.trim(), jd_text: jdText.trim() };
 }
 
 export function adviceFingerprint(resume: ResumeData): string {

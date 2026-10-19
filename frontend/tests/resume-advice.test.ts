@@ -1,6 +1,6 @@
 import { afterAll, beforeEach, expect, test } from 'bun:test';
 import type { ResumeOptimization } from '@techspar/contracts';
-import { buildEditorAdviceInput, adviceFingerprint, buildOptimizedCopy, saveOptimizedCopy } from '../src/resume/advice/editorAdvice';
+import { buildDiagnosticFields, buildEditorAdviceInput, adviceFingerprint, buildOptimizedCopy, saveOptimizedCopy } from '../src/resume/advice/editorAdvice';
 import { flushResumePersistence, setResumeAccount } from '../src/resume/store/resumeAccount';
 import { useResumeStore } from '../src/resume/store/useResumeStore';
 import { blankResumeState } from '../src/resume/config/initialResumeData';
@@ -114,4 +114,15 @@ test('never falls back to hidden content when every section is disabled', () => 
   const resume = source(); resume.menuSections.forEach((section) => { section.enabled = false; });
   expect(() => buildEditorAdviceInput(resume)).toThrow('填写简历');
   expect(adviceFingerprint(resume)).not.toContain('负责接口开发');
+});
+
+test('diagnostic fields include original body and missing metadata, while excluding hidden sections and entries', () => {
+  const resume = source();
+  resume.projects.push({ ...resume.projects[0]!, id: 'hidden', name: '隐藏项目', visible: false });
+  resume.menuSections.find((section) => section.id === 'skills')!.enabled = false;
+  const fields = buildDiagnosticFields(resume);
+  expect(fields.find((field) => field.id === 'experience:job-a')).toMatchObject({ text: '负责接口开发', can_optimize: true });
+  expect(fields.find((field) => field.id === 'projects:project-a:date')).toMatchObject({ text: '时间：待补', can_optimize: false });
+  expect(fields.some((field) => field.id.includes('hidden') || field.id === 'skills')).toBeFalse();
+  expect(buildEditorAdviceInput(resume).diagnostic_fields).toEqual(fields);
 });

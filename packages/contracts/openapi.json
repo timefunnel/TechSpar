@@ -4472,6 +4472,39 @@
                         "type": "string",
                         "maxLength": 12000,
                         "default": ""
+                      },
+                      "diagnostic_fields": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 200
+                            },
+                            "label": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 300
+                            },
+                            "text": {
+                              "type": "string",
+                              "maxLength": 12000
+                            },
+                            "can_optimize": {
+                              "type": "boolean"
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "label",
+                            "text",
+                            "can_optimize"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "maxItems": 200
                       }
                     },
                     "required": [
@@ -4682,6 +4715,19 @@
                                 "type": "string",
                                 "minLength": 1,
                                 "maxLength": 4000
+                              },
+                              "field_id": {
+                                "type": "string",
+                                "nullable": true,
+                                "minLength": 1,
+                                "maxLength": 200
+                              },
+                              "evidence_kind": {
+                                "type": "string",
+                                "enum": [
+                                  "quote",
+                                  "missing"
+                                ]
                               }
                             },
                             "required": [
@@ -4702,6 +4748,36 @@
                             "maxLength": 4000
                           },
                           "maxItems": 20
+                        },
+                        "follow_up_questions": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "field_id": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 200
+                              },
+                              "question": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 1000
+                              },
+                              "purpose": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 4000
+                              }
+                            },
+                            "required": [
+                              "field_id",
+                              "question",
+                              "purpose"
+                            ],
+                            "additionalProperties": false
+                          },
+                          "maxItems": 12
                         },
                         "role_match": {
                           "type": "object",
@@ -4732,6 +4808,65 @@
                                 "type": "string",
                                 "minLength": 1,
                                 "maxLength": 4000
+                              },
+                              "maxItems": 20
+                            },
+                            "requirements": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "requirement": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 4000
+                                  },
+                                  "status": {
+                                    "type": "string",
+                                    "enum": [
+                                      "matched",
+                                      "needs_detail",
+                                      "gap"
+                                    ]
+                                  },
+                                  "evidence": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "object",
+                                      "properties": {
+                                        "field_id": {
+                                          "type": "string",
+                                          "nullable": true,
+                                          "minLength": 1,
+                                          "maxLength": 200
+                                        },
+                                        "quote": {
+                                          "type": "string",
+                                          "minLength": 1,
+                                          "maxLength": 4000
+                                        }
+                                      },
+                                      "required": [
+                                        "field_id",
+                                        "quote"
+                                      ],
+                                      "additionalProperties": false
+                                    },
+                                    "maxItems": 10
+                                  },
+                                  "suggestion": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 4000
+                                  }
+                                },
+                                "required": [
+                                  "requirement",
+                                  "status",
+                                  "evidence",
+                                  "suggestion"
+                                ],
+                                "additionalProperties": false
                               },
                               "maxItems": 20
                             }
@@ -4818,6 +4953,39 @@
                     "maxLength": 12000,
                     "default": ""
                   },
+                  "diagnostic_fields": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 200
+                        },
+                        "label": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 300
+                        },
+                        "text": {
+                          "type": "string",
+                          "maxLength": 12000
+                        },
+                        "can_optimize": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "label",
+                        "text",
+                        "can_optimize"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "maxItems": 200
+                  },
                   "fields": {
                     "type": "array",
                     "items": {
@@ -4848,6 +5016,36 @@
                     },
                     "minItems": 1,
                     "maxItems": 100
+                  },
+                  "clarifications": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "field_id": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 200
+                        },
+                        "question": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 1000
+                        },
+                        "answer": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 4000
+                        }
+                      },
+                      "required": [
+                        "field_id",
+                        "question",
+                        "answer"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "maxItems": 12
                   }
                 },
                 "required": [

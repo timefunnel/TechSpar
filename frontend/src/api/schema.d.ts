@@ -1398,6 +1398,12 @@ export interface paths {
                         target_role?: string;
                         /** @default  */
                         jd_text?: string;
+                        diagnostic_fields?: {
+                            id: string;
+                            label: string;
+                            text: string;
+                            can_optimize: boolean;
+                        }[];
                     } | {
                         /** @enum {string} */
                         source: "uploaded_pdf";
@@ -1449,13 +1455,31 @@ export interface paths {
                                     location: string;
                                     evidence: string;
                                     suggestion: string;
+                                    field_id?: string | null;
+                                    /** @enum {string} */
+                                    evidence_kind?: "quote" | "missing";
                                 }[];
                                 missing_information: string[];
+                                follow_up_questions?: {
+                                    field_id: string;
+                                    question: string;
+                                    purpose: string;
+                                }[];
                                 role_match: {
                                     score: number;
                                     rationale: string;
                                     matched: string[];
                                     gaps: string[];
+                                    requirements?: {
+                                        requirement: string;
+                                        /** @enum {string} */
+                                        status: "matched" | "needs_detail" | "gap";
+                                        evidence: {
+                                            field_id: string | null;
+                                            quote: string;
+                                        }[];
+                                        suggestion: string;
+                                    }[];
                                 } | null;
                                 overall_score: number;
                             };
@@ -1505,10 +1529,21 @@ export interface paths {
                         target_role?: string;
                         /** @default  */
                         jd_text?: string;
+                        diagnostic_fields?: {
+                            id: string;
+                            label: string;
+                            text: string;
+                            can_optimize: boolean;
+                        }[];
                         fields: {
                             id: string;
                             label: string;
                             text: string;
+                        }[];
+                        clarifications?: {
+                            field_id: string;
+                            question: string;
+                            answer: string;
                         }[];
                     };
                 };
